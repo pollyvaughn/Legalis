@@ -1,0 +1,119 @@
+// ==========================================
+// Módulo 1: Gestión de clientes y expedientes
+// ==========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------
+// TIPO DE CLIENTE
+// Enum para distinguir física/jurídica sin usar strings sueltos
+// (evita typos como "Fisica" vs "FISICA" en distintas partes del código)
+// ------------------------------------------
+enum TipoCliente {
+  FISICA
+  JURIDICA
+}
+
+// ------------------------------------------
+// TIPO DE ATENCIÓN
+// Distingue si el cliente es judicial, extrajudicial, o ambos
+// (según el anteproyecto: separar juicios de trámites/asesoría continua)
+// ------------------------------------------
+enum TipoAtencion {
+  JUDICIAL
+  EXTRAJUDICIAL
+  AMBOS
+}
+
+// ------------------------------------------
+// CLIENTE (tabla base)
+// Contiene los datos comunes a persona física y jurídica.
+// Las extensiones (ClientePersonaFisica / ClientePersonaJuridica)
+// cuelgan de esta tabla en relación 1:1.
+// ------------------------------------------
+model Cliente {
+  id              Int           @id @default(autoincrement())
+  ruc             String        @unique // RUC: en física es cédula + dígito verificador, en jurídica es el RUC societario
+  tipo            TipoCliente
+  nombreRazonSocial String      // nombre completo (física) o razón social (jurídica)
+  tipoAtencion    TipoAtencion  @default(JUDICIAL)
+  email           String?
+  telefono        String?
+  direccion       String?
+  activo          Boolean       @default(true) // permite "dar de baja" sin borrar el historial
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relaciones 1:1 con las extensiones (una y solo una debe existir según 'tipo')
+  personaFisica   ClientePersonaFisica?
+  personaJuridica ClientePersonaJuridica?
+
+  // Relación 1:N: un cliente puede tener muchos expedientes
+  expedientes     Expediente[]
+
+  @@map("clientes") // nombre real de la tabla en PostgreSQL (snake_case, convención SQL)
+}
+
+// ------------------------------------------
+// EXTENSIÓN: PERSONA FÍSICA
+// Datos exclusivos de clientes persona física.
+// clienteId es a la vez FK y PK: garantiza la relación 1:1
+// (un Cliente no puede tener dos registros de PersonaFisica)
+// ------------------------------------------
+model ClientePersonaFisica {
+  clienteId               Int      @id
+  cliente                 Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  cedula                  String   @unique
+  digitoVerificador       Int      // dígito verificador del RUC, define condiciones (ej. vencimientos)
+  fechaNacimiento          DateTime?
+
+  @@map("clientes_persona_fisica")
+}
+
+// ------------------------------------------
+// EXTENSIÓN: PERSONA JURÍDICA
+// Datos básicos por ahora (según alcance actual).
+// A futuro: representantes, actas de asamblea, estatutos, libro de acciones
+// (mencionado por la clienta pero fuera del alcance de esta versión).
+// ------------------------------------------
+model ClientePersonaJuridica {
+  clienteId         Int      @id
+  cliente           Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  tipoSocietario    String   // ej. "SA", "SRL", "Fundación" — texto libre por ahora, no enum (puede variar mucho)
+  fechaConstitucion DateTime?
+
+  @@map("clientes_persona_juridica")
+}
+
+// ------------------------------------------
+// EXPEDIENTE
+// Registro de casos judiciales y extrajudiciales.
+// El monto del juicio es opcional porque no todo expediente lo tiene
+// (ej. trámites o asesorías sin monto litigioso definido).
+// ------------------------------------------
+model Expediente {
+  id              Int       @id @default(autoincrement())
+  clienteId       Int
+  cliente         Cliente   @relation(fields: [clienteId], references: [id])
+
+  numeroExpediente String   @unique
+  caratula        String    // ej. "Pérez c/ González s/ Cobro de Guaraníes"
+  fuero           String?   // ej. "Civil y Comercial", "Laboral"
+  jurisdiccion    String?
+  juzgado         String?
+  montoJuicio     Decimal?  @db.Decimal(15, 2) // Decimal para precisión monetaria; 15 dígitos totales, 2 decimales
+
+  activo          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("expedientes")
+}
