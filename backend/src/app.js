@@ -32,6 +32,7 @@ app.get('/api/health', (req, res) => {
 // ------------------------------------------
 // RUTAS DE LA APLICACIÓN
 // ------------------------------------------
-app.use('/api/clientes', require('./routes/clientes.routes'));
+app.use('/api/clientes', require('./modules/clientes/clientes.routes'));
+app.use('/api/expedientes', require('./modules/expedientes/expedientes.routes'));
 
 module.exports = app;

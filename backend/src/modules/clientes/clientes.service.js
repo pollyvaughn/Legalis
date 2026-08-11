@@ -4,7 +4,7 @@
 // No conoce req/res de Express — solo recibe y devuelve datos.
 // ============================================
 
-const prisma = require('../config/database');
+const prisma = require('../../config/database');
 
 // ------------------------------------------
 // CREAR CLIENTE

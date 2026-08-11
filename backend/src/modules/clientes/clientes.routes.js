@@ -6,7 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
-const clientesController = require('../controllers/clientes.controller');
+const clientesController = require('./clientes.controller');
 
 router.post('/', clientesController.crear);          // POST   /api/clientes
 router.get('/', clientesController.listar);           // GET    /api/clientes

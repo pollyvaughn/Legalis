@@ -32,6 +32,36 @@ enum TipoAtencion {
 }
 
 // ------------------------------------------
+// FUERO
+// Define el área jurisdiccional del expediente.
+// Convertido a enum (antes era String libre) porque determina
+// qué roles de ParteProcesal son válidos y si aplican
+// montoJuicio / unidadFiscal.
+// ------------------------------------------
+enum Fuero {
+  CIVIL_COMERCIAL
+  LABORAL
+  PENAL
+  NINEZ_ADOLESCENCIA
+  CONTENCIOSO_ADMINISTRATIVO
+  OTRO
+}
+
+// ------------------------------------------
+// ROL DE PARTE PROCESAL
+// Categorías amplias y estables, independientes del fuero.
+// El matiz exacto (Actor, Imputado, Víctima...) va en
+// ParteProcesal.rolEspecifico como texto libre.
+// ------------------------------------------
+enum RolParte {
+  ACTOR                   // actor / demandante / solicitante / denunciante / víctima
+  DEMANDADO               // demandado / imputado / acusado
+  TERCERO                 // tercero / citado en garantía / querellante adhesivo
+  REPRESENTANTE_ESTATAL   // agente fiscal (Ministerio Público)
+  DEFENSA                 // defensor técnico (privado o público)
+}
+
+// ------------------------------------------
 // CLIENTE (tabla base)
 // Contiene los datos comunes a persona física y jurídica.
 // Las extensiones (ClientePersonaFisica / ClientePersonaJuridica)
@@ -56,6 +86,7 @@ model Cliente {
 
   // Relación 1:N: un cliente puede tener muchos expedientes
   expedientes     Expediente[]
+  partesProcesales ParteProcesal[]  // NUEVO: casos donde este cliente es parte de un expediente (propio o ajeno)
 
   @@map("clientes") // nombre real de la tabla en PostgreSQL (snake_case, convención SQL)
 }
@@ -105,15 +136,50 @@ model Expediente {
   cliente         Cliente   @relation(fields: [clienteId], references: [id])
 
   numeroExpediente String   @unique
-  caratula        String    // ej. "Pérez c/ González s/ Cobro de Guaraníes"
-  fuero           String?   // ej. "Civil y Comercial", "Laboral"
+  caratula        String
+  fuero           Fuero?    // NUEVO: ahora es enum, no String — ver más abajo
   jurisdiccion    String?
   juzgado         String?
-  montoJuicio     Decimal?  @db.Decimal(15, 2) // Decimal para precisión monetaria; 15 dígitos totales, 2 decimales
+  secretaria      String?   // NUEVO: Secretaría del juzgado (ej. "Secretaría N°1"). Opcional por ahora para no romper expedientes ya cargados sin este dato.
+  objetoJuicio    String?   // NUEVO: descripción breve del tipo de proceso (ej. "Cobro de Guaraníes", "Sucesión Intestada", "Estafa")
+  montoJuicio     Decimal?  @db.Decimal(15, 2) // Ya era opcional: no aplica en fueros como Penal
+  unidadFiscal    String?   // NUEVO: exclusivo de fuero Penal (ej. "Unidad Penal N°5"). Null en otros fueros.
 
   activo          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // NUEVO: relación 1:N con las partes procesales del expediente
+  partes          ParteProcesal[]
+
   @@map("expedientes")
+}
+
+// ------------------------------------------
+// PARTE PROCESAL
+// Representa a cada sujeto involucrado en un expediente.
+// Puede o no estar vinculada a un Cliente existente:
+// si la parte contraria no es cliente del estudio,
+// clienteId queda null y se guardan nombre/documento sueltos.
+// ------------------------------------------
+model ParteProcesal {
+  id              Int         @id @default(autoincrement())
+
+  expedienteId    Int
+  expediente      Expediente  @relation(fields: [expedienteId], references: [id], onDelete: Cascade)
+
+  // Vínculo opcional: si esta parte ya es Cliente del estudio, se conecta acá
+  clienteId       Int?
+  cliente         Cliente?    @relation(fields: [clienteId], references: [id])
+
+  // Datos propios de la parte (se completan siempre, sea o no Cliente)
+  nombre          String
+  documento       String?     // CI/RUC del tercero; puede ser null si no se conoce aún
+
+  rol             RolParte    // categoría amplia (ACTOR, DEMANDADO, etc.)
+  rolEspecifico   String?     // etiqueta exacta según fuero (ej. "Imputado", "Víctima", "Actor")
+
+  createdAt       DateTime    @default(now())
+
+  @@map("partes_procesales")
 }

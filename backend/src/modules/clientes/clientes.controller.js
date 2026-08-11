@@ -4,7 +4,7 @@
 // llama al service, y define códigos de respuesta HTTP.
 // ============================================
 
-const clientesService = require('../services/clientes.service');
+const clientesService = require('./clientes.service');
 
 // ------------------------------------------
 // POST /api/clientes
