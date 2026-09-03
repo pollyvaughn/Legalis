@@ -103,8 +103,7 @@ async function obtenerClientePorId(id) {
 
 // ------------------------------------------
 // ACTUALIZAR CLIENTE
-// Actualiza solo los campos base por ahora (no la extensión,
-// para mantenerlo simple en esta primera versión).
+// Actualiza solo los campos base por ahora.
 // ------------------------------------------
 async function actualizarCliente(id, datos) {
   const { nombreRazonSocial, tipoAtencion, email, telefono, direccion, activo } = datos;
