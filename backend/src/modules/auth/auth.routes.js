@@ -1,0 +1,12 @@
+// ==========================================
+// AUTH ROUTES
+// Rutas públicas de autenticación (no requieren estar logueado).
+// ==========================================
+
+const express = require('express');
+const router = express.Router();
+const authController = require('./auth.controller');
+
+router.post('/login', authController.login);
+
+module.exports = router;

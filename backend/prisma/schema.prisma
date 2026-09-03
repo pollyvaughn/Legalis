@@ -183,3 +183,35 @@ model ParteProcesal {
 
   @@map("partes_procesales")
 }
+
+// ------------------------------------------
+// ROL DE USUARIO
+// Define el nivel de acceso dentro del sistema.
+// ABOGADO: acceso total (crear/editar/eliminar en todos los módulos).
+// ASISTENTE: por ahora solo lectura + reportes (se resuelve en el
+// middleware de autorización, no acá — así cambiar permisos más
+// adelante no requiere tocar el schema ni migrar la DB).
+// ------------------------------------------
+enum RolUsuario {
+  ABOGADO
+  ASISTENTE
+}
+
+// ------------------------------------------
+// USER (Usuario del sistema)
+// No hay auto-registro público: los usuarios se crean vía script
+// de seed, porque este sistema es de uso interno y cerrado
+// (una abogada + su asistente), no una app con altas públicas.
+// ------------------------------------------
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  passwordHash String     // nunca se guarda la contraseña en texto plano, solo su hash (bcrypt)
+  nombre       String
+  rol          RolUsuario @default(ASISTENTE)
+  activo       Boolean    @default(true) // permite desactivar acceso sin borrar el historial de quién hizo qué
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("users")
+}
