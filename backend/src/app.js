@@ -6,6 +6,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const { verificarToken } = require('./middlewares/auth.middleware');
 
 const app = express();
 
@@ -22,18 +23,25 @@ app.use(express.json());
 
 // ------------------------------------------
 // RUTA DE PRUEBA (health check)
-// Sirve para confirmar rápido que el server responde,
-// sin depender de la base de datos.
+// Pública a propósito: sirve para confirmar que el server responde
+// sin depender de login ni de la base de datos.
 // ------------------------------------------
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', mensaje: 'PROYECTO 26 backend funcionando' });
 });
 
 // ------------------------------------------
-// RUTAS DE LA APLICACIÓN
+// RUTAS PÚBLICAS (no requieren estar logueado)
 // ------------------------------------------
-app.use('/api/clientes', require('./modules/clientes/clientes.routes'));
-app.use('/api/expedientes', require('./modules/expedientes/expedientes.routes'));
 app.use('/api/auth', require('./modules/auth/auth.routes'));
+
+// ------------------------------------------
+// RUTAS PROTEGIDAS
+// verificarToken se aplica ANTES del router de cada módulo:
+// si el token falta o es inválido, la request nunca llega
+// a clientes.routes.js / expedientes.routes.js.
+// ------------------------------------------
+app.use('/api/clientes', verificarToken, require('./modules/clientes/clientes.routes'));
+app.use('/api/expedientes', verificarToken, require('./modules/expedientes/expedientes.routes'));
 
 module.exports = app;
