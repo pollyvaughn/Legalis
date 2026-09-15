@@ -55,10 +55,14 @@ async function listar(req, res) {
 
 // ------------------------------------------
 // GET /api/expedientes/:id
+// Por defecto solo trae el expediente si está activo.
+// ?incluirInactivos=true permite traerlo aunque esté dado de baja
+// (pensado para una futura pantalla de reactivación).
 // ------------------------------------------
 async function obtenerPorId(req, res) {
   try {
-    const expediente = await expedientesService.obtenerExpedientePorId(req.params.id);
+    const incluirInactivos = req.query.incluirInactivos === 'true';
+    const expediente = await expedientesService.obtenerExpedientePorId(req.params.id, incluirInactivos);
 
     if (!expediente) {
       return res.status(404).json({ error: 'Expediente no encontrado' });
@@ -73,6 +77,7 @@ async function obtenerPorId(req, res) {
 
 // ------------------------------------------
 // PUT /api/expedientes/:id
+// No permite editar clienteId (ver nota en el service).
 // ------------------------------------------
 async function actualizar(req, res) {
   try {
@@ -81,6 +86,10 @@ async function actualizar(req, res) {
   } catch (error) {
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Expediente no encontrado' });
+    }
+    // P2002 = numeroExpediente duplicado (ahora también editable, puede chocar con otro)
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Ya existe un expediente con ese número' });
     }
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el expediente' });
