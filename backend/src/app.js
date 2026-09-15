@@ -44,4 +44,20 @@ app.use('/api/auth', require('./modules/auth/auth.routes'));
 app.use('/api/clientes', verificarToken, require('./modules/clientes/clientes.routes'));
 app.use('/api/expedientes', verificarToken, require('./modules/expedientes/expedientes.routes'));
 
+// Partes procesales ANIDADAS bajo expediente:
+// POST /api/expedientes/:expedienteId/partes  → crear una parte
+// GET  /api/expedientes/:expedienteId/partes  → listar partes de ese expediente
+// mergeParams (definido en partes.routes.js) permite que ese router
+// lea :expedienteId aunque lo haya declarado este app.use, no él mismo.
+app.use(
+  '/api/expedientes/:expedienteId/partes',
+  verificarToken,
+  require('./modules/partes/partes.routes')
+);
+
+// Partes procesales PROPIAS, para operaciones que no dependen
+// de conocer el expedienteId (por ahora, solo editar por id):
+// PUT /api/partes/:id
+app.use('/api/partes', verificarToken, require('./modules/partes/partes.routes.propias'));
+
 module.exports = app;
