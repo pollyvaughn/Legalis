@@ -49,11 +49,15 @@ async function listar(req, res) {
 
 // ------------------------------------------
 // GET /api/clientes/:id
-// Obtiene un cliente puntual por su ID
+// Obtiene un cliente puntual por su ID.
+// Por defecto solo lo trae si está activo.
+// ?incluirInactivos=true permite traerlo aunque esté dado de baja
+// (mismo patrón usado en expedientes.controller.js).
 // ------------------------------------------
 async function obtenerPorId(req, res) {
   try {
-    const cliente = await clientesService.obtenerClientePorId(req.params.id);
+    const incluirInactivos = req.query.incluirInactivos === 'true';
+    const cliente = await clientesService.obtenerClientePorId(req.params.id, incluirInactivos);
 
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
@@ -68,7 +72,9 @@ async function obtenerPorId(req, res) {
 
 // ------------------------------------------
 // PUT /api/clientes/:id
-// Actualiza los datos base de un cliente existente
+// Actualiza los datos base de un cliente y, si corresponde,
+// los de su extensión (ver clientes.service.js para el detalle
+// de qué campos se pueden editar y por qué).
 // ------------------------------------------
 async function actualizar(req, res) {
   try {
@@ -78,6 +84,10 @@ async function actualizar(req, res) {
     // P2025 es el código de Prisma para "registro no encontrado" al actualizar
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    // P2002 = ruc o cedula duplicados (ambos son unique en el schema)
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Ya existe otro cliente con ese RUC o cédula' });
     }
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el cliente' });
