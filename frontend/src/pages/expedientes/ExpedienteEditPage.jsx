@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
+import api from '../../api/axios';
 
 function ExpedienteEditPage() {
   const { id } = useParams();

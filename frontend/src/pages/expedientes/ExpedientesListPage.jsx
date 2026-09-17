@@ -6,8 +6,8 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
+import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 
 function ExpedientesListPage() {
   const [expedientes, setExpedientes] = useState([]);
@@ -52,6 +52,14 @@ function ExpedientesListPage() {
             Cerrar sesión
           </button>
         </div>
+      </div>
+
+      {/* Navegación simple entre módulos, mientras no hay un layout con sidebar */}
+      <div className="mb-4 flex gap-4 text-sm">
+        <span className="text-gray-800 font-medium">Expedientes</span>
+        <Link to="/clientes" className="text-blue-600 hover:underline">
+          Clientes
+        </Link>
       </div>
 
       {/* Botón de nuevo expediente */}

@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../api/axios';
+import api from '../../api/axios';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.

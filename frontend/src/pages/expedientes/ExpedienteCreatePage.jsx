@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
+import api from '../../api/axios';
 
 function ExpedienteCreatePage() {
   const navigate = useNavigate();
@@ -40,6 +40,7 @@ function ExpedienteCreatePage() {
       try {
         const respuesta = await api.get('/clientes');
         setClientes(respuesta.data);
+      // eslint-disable-next-line no-unused-vars
       } catch (err) {
         setError('No se pudieron cargar los clientes');
       } finally {

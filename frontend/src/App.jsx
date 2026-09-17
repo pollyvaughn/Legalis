@@ -7,10 +7,13 @@
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
-import ExpedientesListPage from './pages/ExpedientesListPage';
-import ExpedienteDetailPage from './pages/ExpedienteDetailPage';
-import ExpedienteEditPage from './pages/ExpedienteEditPage';
-import ExpedienteCreatePage from './pages/ExpedienteCreatePage';
+import ExpedientesListPage from './pages/expedientes/ExpedientesListPage';
+import ExpedienteDetailPage from './pages/expedientes/ExpedienteDetailPage';
+import ExpedienteEditPage from './pages/expedientes/ExpedienteEditPage';
+import ExpedienteCreatePage from './pages/expedientes/ExpedienteCreatePage';
+import ClientesListPage from './pages/clientes/ClientesListPage';
+import ClienteCreatePage from './pages/clientes/ClienteCreatePage';
+import ClienteDetailPage from './pages/clientes/ClienteDetailPage';
 import RutaProtegida from './components/RutaProtegida';
 
 function App() {
@@ -51,6 +54,33 @@ function App() {
           element={
             <RutaProtegida>
               <ExpedienteEditPage />
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/clientes"
+          element={
+            <RutaProtegida>
+              <ClientesListPage />
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/clientes/nuevo"
+          element={
+            <RutaProtegida>
+              <ClienteCreatePage />
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/clientes/:id"
+          element={
+            <RutaProtegida>
+              <ClienteDetailPage />
             </RutaProtegida>
           }
         />
