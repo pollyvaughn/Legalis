@@ -2,7 +2,8 @@
 // APP.JSX
 // Define las rutas (URLs) de la aplicación.
 // /login es pública. Todo lo demás requiere estar logueado
-// (envuelto en RutaProtegida).
+// (envuelto en RutaProtegida) y además queda dentro de AppLayout
+// (sidebar + header), para que la navegación esté siempre visible.
 // ============================================
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -15,6 +16,8 @@ import ClientesListPage from './pages/clientes/ClientesListPage';
 import ClienteCreatePage from './pages/clientes/ClienteCreatePage';
 import ClienteDetailPage from './pages/clientes/ClienteDetailPage';
 import RutaProtegida from './components/RutaProtegida';
+import AppLayout from './components/layout/AppLayout';
+import ProximamentePage from './pages/comunes/ProximamentePage';
 
 function App() {
   return (
@@ -22,11 +25,26 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
+        {/* --- Dashboard (placeholder, módulo pendiente) --- */}
+        <Route
+          path="/dashboard"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <ProximamentePage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Expedientes --- */}
         <Route
           path="/expedientes"
           element={
             <RutaProtegida>
-              <ExpedientesListPage />
+              <AppLayout>
+                <ExpedientesListPage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
@@ -35,7 +53,9 @@ function App() {
           path="/expedientes/nuevo"
           element={
             <RutaProtegida>
-              <ExpedienteCreatePage />
+              <AppLayout>
+                <ExpedienteCreatePage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
@@ -44,7 +64,9 @@ function App() {
           path="/expedientes/:id"
           element={
             <RutaProtegida>
-              <ExpedienteDetailPage />
+              <AppLayout>
+                <ExpedienteDetailPage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
@@ -53,16 +75,21 @@ function App() {
           path="/expedientes/:id/editar"
           element={
             <RutaProtegida>
-              <ExpedienteEditPage />
+              <AppLayout>
+                <ExpedienteEditPage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
 
+        {/* --- Clientes --- */}
         <Route
           path="/clientes"
           element={
             <RutaProtegida>
-              <ClientesListPage />
+              <AppLayout>
+                <ClientesListPage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
@@ -71,7 +98,9 @@ function App() {
           path="/clientes/nuevo"
           element={
             <RutaProtegida>
-              <ClienteCreatePage />
+              <AppLayout>
+                <ClienteCreatePage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
@@ -80,7 +109,54 @@ function App() {
           path="/clientes/:id"
           element={
             <RutaProtegida>
-              <ClienteDetailPage />
+              <AppLayout>
+                <ClienteDetailPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Módulos aún sin backend: todos apuntan al mismo placeholder --- */}
+        <Route
+          path="/asesorias"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <ProximamentePage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/calendario"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <ProximamentePage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/honorarios"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <ProximamentePage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/cobros"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <ProximamentePage />
+              </AppLayout>
             </RutaProtegida>
           }
         />
