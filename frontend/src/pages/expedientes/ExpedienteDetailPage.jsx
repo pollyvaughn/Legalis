@@ -13,10 +13,13 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
+import Button from '../../components/ui/Button';
+import { Input, SelectInput } from '../../components/ui/Input';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.
 const ROLES_PROCESALES = ['ACTOR', 'DEMANDADO', 'TERCERO', 'REPRESENTANTE_ESTATAL', 'DEFENSA'];
+const OPCIONES_ROLES = ROLES_PROCESALES.map((rol) => ({ value: rol, label: rol }));
 
 // Muestra el valor, o un guión si está vacío/null — evita que
 // la lista de partes se vea inconsistente entre sí (ver backlog).
@@ -227,12 +230,9 @@ function ExpedienteDetailPage() {
             <p className="mt-1 text-sm text-gray-500">{expediente.caratula}</p>
           </div>
           {!editando && (
-            <button
-              onClick={iniciarEdicion}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-            >
+            <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
               Editar
-            </button>
+            </Button>
           )}
         </div>
 
@@ -274,141 +274,76 @@ function ExpedienteDetailPage() {
           // dueño requiere un flujo explícito, no un campo suelto).
           // ------------------------------------------
           <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                N° Expediente
-              </label>
-              <input
-                type="text"
-                name="numeroExpediente"
-                value={form.numeroExpediente}
-                onChange={handleChange}
-                required
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-              />
-            </div>
+            <Input
+              label="N° Expediente"
+              name="numeroExpediente"
+              value={form.numeroExpediente}
+              onChange={handleChange}
+              required
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Carátula</label>
-              <input
-                type="text"
-                name="caratula"
-                value={form.caratula}
-                onChange={handleChange}
-                required
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-              />
-            </div>
+            <Input
+              label="Carátula"
+              name="caratula"
+              value={form.caratula}
+              onChange={handleChange}
+              required
+            />
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Fuero</label>
-                <input
-                  type="text"
-                  name="fuero"
-                  value={form.fuero}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Jurisdicción
-                </label>
-                <input
-                  type="text"
-                  name="jurisdiccion"
-                  value={form.jurisdiccion}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Juzgado</label>
-                <input
-                  type="text"
-                  name="juzgado"
-                  value={form.juzgado}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Secretaría
-                </label>
-                <input
-                  type="text"
-                  name="secretaria"
-                  value={form.secretaria}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Objeto del juicio
-              </label>
-              <input
-                type="text"
-                name="objetoJuicio"
-                value={form.objetoJuicio}
+              <Input label="Fuero" name="fuero" value={form.fuero} onChange={handleChange} />
+              <Input
+                label="Jurisdicción"
+                name="jurisdiccion"
+                value={form.jurisdiccion}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Monto del juicio
-                </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  name="montoJuicio"
-                  value={form.montoJuicio}
-                  onChange={handleChange}
-                  placeholder="0"
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Unidad fiscal
-                </label>
-                <input
-                  type="text"
-                  name="unidadFiscal"
-                  value={form.unidadFiscal}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
+              <Input label="Juzgado" name="juzgado" value={form.juzgado} onChange={handleChange} />
+              <Input
+                label="Secretaría"
+                name="secretaria"
+                value={form.secretaria}
+                onChange={handleChange}
+              />
+            </div>
+
+            <Input
+              label="Objeto del juicio"
+              name="objetoJuicio"
+              value={form.objetoJuicio}
+              onChange={handleChange}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Monto del juicio"
+                type="text"
+                inputMode="decimal"
+                name="montoJuicio"
+                value={form.montoJuicio}
+                onChange={handleChange}
+                placeholder="0"
+              />
+              <Input
+                label="Unidad fiscal"
+                name="unidadFiscal"
+                value={form.unidadFiscal}
+                onChange={handleChange}
+              />
             </div>
 
             {errorForm && <p className="text-sm text-red-600">{errorForm}</p>}
 
             <div className="flex gap-2 pt-2">
-              <button
-                type="submit"
-                disabled={guardando}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
+              <Button type="submit" disabled={guardando}>
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditando(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-              >
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEditando(false)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -419,12 +354,9 @@ function ExpedienteDetailPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">Partes procesales</h2>
           {!mostrarFormAgregar && (
-            <button
-              onClick={() => setMostrarFormAgregar(true)}
-              className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-            >
+            <Button size="sm" onClick={() => setMostrarFormAgregar(true)}>
               + Agregar parte
-            </button>
+            </Button>
           )}
         </div>
 
@@ -444,75 +376,45 @@ function ExpedienteDetailPage() {
                     onSubmit={handleGuardarEdicionParte}
                     className="space-y-3 rounded-lg bg-gray-50 p-4"
                   >
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700">
-                        Nombre
-                      </label>
-                      <input
-                        type="text"
-                        value={nombreEdit}
-                        onChange={(e) => setNombreEdit(e.target.value)}
-                        required
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
-                      />
-                    </div>
+                    <Input
+                      label="Nombre"
+                      value={nombreEdit}
+                      onChange={(e) => setNombreEdit(e.target.value)}
+                      required
+                      className="bg-white"
+                    />
 
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700">
-                        Documento
-                      </label>
-                      <input
-                        type="text"
-                        value={documentoEdit}
-                        onChange={(e) => setDocumentoEdit(e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
-                      />
-                    </div>
+                    <Input
+                      label="Documento"
+                      value={documentoEdit}
+                      onChange={(e) => setDocumentoEdit(e.target.value)}
+                      className="bg-white"
+                    />
 
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700">
-                        Rol procesal
-                      </label>
-                      <select
-                        value={rolEdit}
-                        onChange={(e) => setRolEdit(e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
-                      >
-                        {ROLES_PROCESALES.map((rol) => (
-                          <option key={rol} value={rol}>{rol}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <SelectInput
+                      label="Rol procesal"
+                      value={rolEdit}
+                      onChange={(e) => setRolEdit(e.target.value)}
+                      opciones={OPCIONES_ROLES}
+                      className="bg-white"
+                    />
 
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-700">
-                        Rol específico (ej: Apoderado)
-                      </label>
-                      <input
-                        type="text"
-                        value={rolEspecificoEdit}
-                        onChange={(e) => setRolEspecificoEdit(e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
-                      />
-                    </div>
+                    <Input
+                      label="Rol específico (ej: Apoderado)"
+                      value={rolEspecificoEdit}
+                      onChange={(e) => setRolEspecificoEdit(e.target.value)}
+                      className="bg-white"
+                    />
 
                     {errorEdit && <p className="text-sm text-red-600">{errorEdit}</p>}
 
                     <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        disabled={guardandoEdit}
-                        className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-                      >
+                      <Button type="submit" size="sm" disabled={guardandoEdit}>
                         {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelarEdicionParte}
-                        className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
-                      >
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={cancelarEdicionParte}>
                         Cancelar
-                      </button>
+                      </Button>
                     </div>
                   </form>
                 ) : (
@@ -524,12 +426,9 @@ function ExpedienteDetailPage() {
                         {parte.rol} · {conPlaceholder(parte.documento)} · {conPlaceholder(parte.rolEspecifico)}
                       </p>
                     </div>
-                    <button
-                      onClick={() => iniciarEdicionParte(parte)}
-                      className="text-sm font-medium text-gray-600 hover:text-gray-900"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
                       Editar
-                    </button>
+                    </Button>
                   </div>
                 )}
               </li>
@@ -540,61 +439,35 @@ function ExpedienteDetailPage() {
         {/* Form inline para agregar una parte nueva */}
         {mostrarFormAgregar && (
           <form onSubmit={handleAgregarParte} className="space-y-3 border-t border-gray-100 pt-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Nombre</label>
-              <input
-                type="text"
-                value={nombreParte}
-                onChange={(e) => setNombreParte(e.target.value)}
-                required
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-              />
-            </div>
+            <Input
+              label="Nombre"
+              value={nombreParte}
+              onChange={(e) => setNombreParte(e.target.value)}
+              required
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Documento (opcional)
-              </label>
-              <input
-                type="text"
-                value={documentoParte}
-                onChange={(e) => setDocumentoParte(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-              />
-            </div>
+            <Input
+              label="Documento (opcional)"
+              value={documentoParte}
+              onChange={(e) => setDocumentoParte(e.target.value)}
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Rol procesal
-              </label>
-              <select
-                value={rolParte}
-                onChange={(e) => setRolParte(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-              >
-                {ROLES_PROCESALES.map((rol) => (
-                  <option key={rol} value={rol}>{rol}</option>
-                ))}
-              </select>
-            </div>
+            <SelectInput
+              label="Rol procesal"
+              value={rolParte}
+              onChange={(e) => setRolParte(e.target.value)}
+              opciones={OPCIONES_ROLES}
+            />
 
             {errorParte && <p className="text-sm text-red-600">{errorParte}</p>}
 
             <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={guardandoParte}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
+              <Button type="submit" disabled={guardandoParte}>
                 {guardandoParte ? 'Guardando...' : 'Guardar parte'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMostrarFormAgregar(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-              >
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setMostrarFormAgregar(false)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         )}

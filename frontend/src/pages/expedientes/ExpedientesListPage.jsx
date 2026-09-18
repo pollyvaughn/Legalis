@@ -8,9 +8,10 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search } from 'lucide-react';
 import api from '../../api/axios';
 import ExpedienteFormModal from './ExpedienteFormModal';
+import Button from '../../components/ui/Button';
+import TablaContainer from '../../components/ui/TablaContainer';
 
 function ExpedientesListPage() {
   const [expedientes, setExpedientes] = useState([]);
@@ -55,40 +56,20 @@ function ExpedientesListPage() {
       {/* --- Encabezado de la página: título + acción principal --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Expedientes</h1>
-        <button
-          onClick={() => setMostrarModal(true)}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          + Nuevo expediente
-        </button>
+        <Button onClick={() => setMostrarModal(true)}>+ Nuevo expediente</Button>
       </div>
 
       {cargando && <p className="text-sm text-gray-500">Cargando expedientes...</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!cargando && !error && (
-        <div className="rounded-xl border border-gray-200 bg-white">
-          {/* --- Barra de búsqueda + contador --- */}
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <div className="relative w-80">
-              <Search
-                size={16}
-                strokeWidth={1.75}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar N° expediente, carátula, cliente..."
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
-              />
-            </div>
-            <span className="text-sm text-gray-500">
-              {expedientesFiltrados.length} expediente{expedientesFiltrados.length !== 1 && 's'}
-            </span>
-          </div>
-
+        <TablaContainer
+          busqueda={busqueda}
+          onBusquedaChange={setBusqueda}
+          placeholder="Buscar N° expediente, carátula, cliente..."
+          cantidad={expedientesFiltrados.length}
+          unidad="expediente"
+        >
           {expedientesFiltrados.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-gray-500">
               Todavía no hay expedientes cargados.
@@ -127,7 +108,7 @@ function ExpedientesListPage() {
               </tbody>
             </table>
           )}
-        </div>
+        </TablaContainer>
       )}
 
       {/* --- Modal de alta de expediente (overlay) --- */}

@@ -11,6 +11,9 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
+import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import { Input, SelectInput } from '../../components/ui/Input';
 
 function ClienteDetailPage() {
   const { id } = useParams();
@@ -117,19 +120,16 @@ function ClienteDetailPage() {
               {cliente.nombreRazonSocial}
             </h1>
             <div className="mt-2 flex items-center gap-2">
-              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+              <Badge tone="gray">
                 {cliente.tipo === 'FISICA' ? 'Persona física' : 'Persona jurídica'}
-              </span>
+              </Badge>
               <span className="text-sm text-gray-500">RUC {cliente.ruc}</span>
             </div>
           </div>
           {!editando && (
-            <button
-              onClick={iniciarEdicion}
-              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
-            >
+            <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
               Editar
-            </button>
+            </Button>
           )}
         </div>
 
@@ -187,173 +187,107 @@ function ClienteDetailPage() {
           // El tipo NUNCA se muestra como campo editable acá.
           // ------------------------------------------
           <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                {cliente.tipo === 'FISICA' ? 'Nombre completo' : 'Razón social'}
-              </label>
-              <input
-                type="text"
-                name="nombreRazonSocial"
-                value={form.nombreRazonSocial}
+            <Input
+              label={cliente.tipo === 'FISICA' ? 'Nombre completo' : 'Razón social'}
+              name="nombreRazonSocial"
+              value={form.nombreRazonSocial}
+              onChange={handleChange}
+              required
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="RUC" name="ruc" value={form.ruc} onChange={handleChange} required />
+              <SelectInput
+                label="Tipo de atención"
+                name="tipoAtencion"
+                value={form.tipoAtencion}
                 onChange={handleChange}
-                required
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                opciones={[
+                  { value: 'JUDICIAL', label: 'Judicial' },
+                  { value: 'EXTRAJUDICIAL', label: 'Extrajudicial' },
+                  { value: 'AMBOS', label: 'Ambos' },
+                ]}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">RUC</label>
-                <input
-                  type="text"
-                  name="ruc"
-                  value={form.ruc}
-                  onChange={handleChange}
-                  required
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Tipo de atención
-                </label>
-                <select
-                  name="tipoAtencion"
-                  value={form.tipoAtencion}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                >
-                  <option value="JUDICIAL">Judicial</option>
-                  <option value="EXTRAJUDICIAL">Extrajudicial</option>
-                  <option value="AMBOS">Ambos</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Teléfono</label>
-                <input
-                  type="text"
-                  name="telefono"
-                  value={form.telefono}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Dirección</label>
-              <input
-                type="text"
-                name="direccion"
-                value={form.direccion}
+              <Input
+                label="Email"
+                type="email"
+                name="email"
+                value={form.email}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+              />
+              <Input
+                label="Teléfono"
+                name="telefono"
+                value={form.telefono}
+                onChange={handleChange}
               />
             </div>
+
+            <Input
+              label="Dirección"
+              name="direccion"
+              value={form.direccion}
+              onChange={handleChange}
+            />
 
             {cliente.tipo === 'FISICA' && (
               <div className="space-y-4 border-t border-gray-100 pt-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Cédula
-                    </label>
-                    <input
-                      type="text"
-                      name="cedula"
-                      value={form.cedula}
-                      onChange={handleChange}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Dígito verificador
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      name="digitoVerificador"
-                      value={form.digitoVerificador}
-                      onChange={handleChange}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Fecha de nacimiento
-                  </label>
-                  <input
-                    type="date"
-                    name="fechaNacimiento"
-                    value={form.fechaNacimiento}
+                  <Input
+                    label="Cédula"
+                    name="cedula"
+                    value={form.cedula}
                     onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                  />
+                  <Input
+                    label="Dígito verificador"
+                    type="text"
+                    inputMode="numeric"
+                    name="digitoVerificador"
+                    value={form.digitoVerificador}
+                    onChange={handleChange}
                   />
                 </div>
+                <Input
+                  label="Fecha de nacimiento"
+                  type="date"
+                  name="fechaNacimiento"
+                  value={form.fechaNacimiento}
+                  onChange={handleChange}
+                />
               </div>
             )}
 
             {cliente.tipo === 'JURIDICA' && (
               <div className="space-y-4 border-t border-gray-100 pt-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Tipo societario
-                  </label>
-                  <input
-                    type="text"
-                    name="tipoSocietario"
-                    value={form.tipoSocietario}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Fecha de constitución
-                  </label>
-                  <input
-                    type="date"
-                    name="fechaConstitucion"
-                    value={form.fechaConstitucion}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
-                  />
-                </div>
+                <Input
+                  label="Tipo societario"
+                  name="tipoSocietario"
+                  value={form.tipoSocietario}
+                  onChange={handleChange}
+                />
+                <Input
+                  label="Fecha de constitución"
+                  type="date"
+                  name="fechaConstitucion"
+                  value={form.fechaConstitucion}
+                  onChange={handleChange}
+                />
               </div>
             )}
 
             {errorForm && <p className="text-sm text-red-600">{errorForm}</p>}
 
             <div className="flex gap-2 pt-2">
-              <button
-                type="submit"
-                disabled={guardando}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-              >
+              <Button type="submit" disabled={guardando}>
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditando(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-              >
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEditando(false)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         )}
