@@ -60,16 +60,21 @@ async function crearExpediente(datos) {
 
 // ------------------------------------------
 // LISTAR EXPEDIENTES
-// Devuelve todos los expedientes activos.
-// Permite filtrar opcionalmente por clienteId (para la "vista focal" del Módulo 1).
-// No incluye "partes": para el listado general no hace falta el
-// detalle de actor/demandado/etc., solo se necesita en el detalle
-// (ver obtenerExpedientePorId) para no traer datos de más.
+// Por defecto solo trae expedientes activos. Pasando
+// incluirInactivos = true se traen todos (mismo patrón que
+// obtenerExpedientePorId y clientes.service.js, para que el
+// frontend pueda ofrecer un filtro Activos/Inactivos/Todos).
+// Sigue permitiendo filtrar opcionalmente por clienteId (para
+// la "vista focal" del Módulo 1) — ambos filtros son compatibles
+// entre sí (ej: "todos los expedientes, activos o no, del cliente X").
 // ------------------------------------------
-async function listarExpedientes(clienteId) {
-  const where = { activo: true };
+async function listarExpedientes(clienteId, incluirInactivos = false) {
+  const where = {};
 
-  // Si se pasa clienteId, filtra solo los expedientes de ese cliente
+  if (!incluirInactivos) {
+    where.activo = true;
+  }
+
   if (clienteId) {
     where.clienteId = Number(clienteId);
   }

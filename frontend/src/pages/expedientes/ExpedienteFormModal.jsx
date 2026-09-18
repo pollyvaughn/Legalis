@@ -14,6 +14,7 @@ import api from '../../api/axios';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { Input, SelectInput } from '../../components/ui/Input';
+import { OPCIONES_FUERO } from '../../constants/fueros';
 
 export default function ExpedienteFormModal({ onClose }) {
   const navigate = useNavigate();
@@ -131,7 +132,13 @@ export default function ExpedienteFormModal({ onClose }) {
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Fuero" name="fuero" value={form.fuero} onChange={handleChange} />
+              <SelectInput
+                label="Fuero"
+                name="fuero"
+                value={form.fuero}
+                onChange={handleChange}
+                opciones={[{ value: '', label: 'Seleccionar...', disabled: true }, ...OPCIONES_FUERO]}
+              />
               <Input
                 label="Jurisdicción"
                 name="jurisdiccion"

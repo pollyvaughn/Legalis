@@ -5,6 +5,8 @@
 // El campo "tipo" NUNCA se muestra como editable: es una decisión
 // de diseño (ver clientes.service.js) — si se cargó mal, se
 // soft-deletea el cliente y se crea uno nuevo con el tipo correcto.
+// El botón Inactivar/Reactivar hace soft-delete via PUT con
+// { activo: false/true }, con confirmación previa en un modal.
 // ============================================
 
 import { useEffect, useState } from 'react';
@@ -13,11 +15,15 @@ import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
 
 function ClienteDetailPage() {
   const { id } = useParams();
 
+  // Trae el cliente aunque esté inactivo (incluirInactivos=true),
+  // para poder ver su detalle y reactivarlo si hace falta —
+  // sin esto, un cliente inactivado desaparecería de la app entera.
   const [cliente, setCliente] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -27,9 +33,14 @@ function ClienteDetailPage() {
   const [guardando, setGuardando] = useState(false);
   const [errorForm, setErrorForm] = useState('');
 
+  // Estado del modal de confirmación para inactivar/reactivar
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [errorEstado, setErrorEstado] = useState('');
+
   async function cargarCliente() {
     try {
-      const respuesta = await api.get(`/clientes/${id}`);
+      const respuesta = await api.get(`/clientes/${id}?incluirInactivos=true`);
       setCliente(respuesta.data);
     } catch (err) {
       setError('No se pudo cargar el cliente');
@@ -94,6 +105,26 @@ function ClienteDetailPage() {
     }
   }
 
+  // ------------------------------------------
+  // handleCambiarEstado: envía el toggle de activo/inactivo,
+  // tras la confirmación del usuario en el modal.
+  // ------------------------------------------
+  async function handleCambiarEstado() {
+    setErrorEstado('');
+    setCambiandoEstado(true);
+
+    try {
+      await api.put(`/clientes/${id}`, { activo: !cliente.activo });
+      setMostrarConfirmacion(false);
+      await cargarCliente();
+    } catch (err) {
+      const mensaje = err.response?.data?.error || 'No se pudo cambiar el estado del cliente';
+      setErrorEstado(mensaje);
+    } finally {
+      setCambiandoEstado(false);
+    }
+  }
+
   if (cargando) {
     return <p className="text-sm text-gray-500">Cargando cliente...</p>;
   }
@@ -123,13 +154,25 @@ function ClienteDetailPage() {
               <Badge tone="gray">
                 {cliente.tipo === 'FISICA' ? 'Persona física' : 'Persona jurídica'}
               </Badge>
+              <Badge tone={cliente.activo ? 'green' : 'gray'}>
+                {cliente.activo ? 'Activo' : 'Inactivo'}
+              </Badge>
               <span className="text-sm text-gray-500">RUC {cliente.ruc}</span>
             </div>
           </div>
           {!editando && (
-            <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
-              Editar
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
+                Editar
+              </Button>
+              <Button
+                variant={cliente.activo ? 'danger' : 'secondary'}
+                size="sm"
+                onClick={() => setMostrarConfirmacion(true)}
+              >
+                {cliente.activo ? 'Inactivar' : 'Reactivar'}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -314,6 +357,52 @@ function ClienteDetailPage() {
           </ul>
         )}
       </div>
+
+      {/* --- Modal de confirmación para inactivar/reactivar --- */}
+      {mostrarConfirmacion && (
+        <Modal
+          title={cliente.activo ? 'Inactivar cliente' : 'Reactivar cliente'}
+          onClose={() => setMostrarConfirmacion(false)}
+        >
+          <div className="px-6 py-5">
+            <p className="text-sm text-gray-700">
+              {cliente.activo ? (
+                <>
+                  ¿Seguro que querés inactivar a <strong>{cliente.nombreRazonSocial}</strong>?
+                  No vas a poder crearle nuevos expedientes hasta reactivarlo, pero su historial
+                  se conserva.
+                </>
+              ) : (
+                <>
+                  ¿Querés reactivar a <strong>{cliente.nombreRazonSocial}</strong>? Va a volver
+                  a aparecer como cliente activo.
+                </>
+              )}
+            </p>
+            {errorEstado && <p className="mt-3 text-sm text-red-600">{errorEstado}</p>}
+          </div>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setMostrarConfirmacion(false)}
+              disabled={cambiandoEstado}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={cliente.activo ? 'danger' : 'primary'}
+              onClick={handleCambiarEstado}
+              disabled={cambiandoEstado}
+            >
+              {cambiandoEstado
+                ? 'Guardando...'
+                : cliente.activo
+                ? 'Sí, inactivar'
+                : 'Sí, reactivar'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -35,11 +35,13 @@ async function crear(req, res) {
 
 // ------------------------------------------
 // GET /api/clientes
-// Lista todos los clientes activos
+// Lista clientes. Por defecto solo los activos.
+// ?incluirInactivos=true trae también los inactivos.
 // ------------------------------------------
 async function listar(req, res) {
   try {
-    const clientes = await clientesService.listarClientes();
+    const incluirInactivos = req.query.incluirInactivos === 'true';
+    const clientes = await clientesService.listarClientes(incluirInactivos);
     res.json(clientes);
   } catch (error) {
     console.error(error);

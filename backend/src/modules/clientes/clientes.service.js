@@ -87,11 +87,20 @@ async function crearCliente(datos) {
 
 // ------------------------------------------
 // LISTAR CLIENTES
-// Devuelve todos los clientes activos, con su extensión incluida.
+// Por defecto solo trae clientes activos. Pasando
+// incluirInactivos = true se traen todos (mismo patrón que
+// obtenerClientePorId, para que el frontend pueda ofrecer un
+// filtro Activos/Inactivos/Todos).
 // ------------------------------------------
-async function listarClientes() {
+async function listarClientes(incluirInactivos = false) {
+  const where = {};
+
+  if (!incluirInactivos) {
+    where.activo = true;
+  }
+
   return prisma.cliente.findMany({
-    where: { activo: true },
+    where,
     include: {
       personaFisica: true,
       personaJuridica: true,

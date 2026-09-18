@@ -4,7 +4,8 @@
 // partes procesales (vienen incluidas en el GET por id, ver
 // expedientes.service.js del backend). El botón "Editar" alterna
 // la card principal a un form inline (mismo patrón que
-// ClienteDetailPage — no navega a una página separada).
+// ClienteDetailPage). El botón Inactivar/Reactivar hace soft-delete
+// via PUT con { activo: false/true }, con confirmación previa.
 // La edición de partes procesales es independiente: cada parte
 // se edita inline por fila, sin relación con el form de arriba.
 // ============================================
@@ -14,7 +15,10 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
 import Button from '../../components/ui/Button';
+import Badge from '../../components/ui/Badge';
+import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
+import { OPCIONES_FUERO, etiquetaFuero } from '../../constants/fueros';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.
@@ -41,6 +45,11 @@ function ExpedienteDetailPage() {
   const [guardando, setGuardando] = useState(false);
   const [errorForm, setErrorForm] = useState('');
 
+  // Estado del modal de confirmación para inactivar/reactivar
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const [errorEstado, setErrorEstado] = useState('');
+
   // Estado del form inline para AGREGAR una parte nueva
   const [mostrarFormAgregar, setMostrarFormAgregar] = useState(false);
   const [nombreParte, setNombreParte] = useState('');
@@ -61,14 +70,13 @@ function ExpedienteDetailPage() {
   const [errorEdit, setErrorEdit] = useState('');
 
   // ------------------------------------------
-  // Trae el expediente del backend. Está en una función aparte
-  // (no solo adentro del useEffect) porque también la volvemos
-  // a llamar después de editar el expediente o agregar/editar
-  // una parte, para refrescar.
+  // Trae el expediente del backend. Pide incluirInactivos=true
+  // para poder ver el detalle y reactivarlo si ya está inactivo
+  // (sin esto, un expediente inactivado sería inalcanzable).
   // ------------------------------------------
   async function cargarExpediente() {
     try {
-      const respuesta = await api.get(`/expedientes/${id}`);
+      const respuesta = await api.get(`/expedientes/${id}?incluirInactivos=true`);
       setExpediente(respuesta.data);
     } catch (err) {
       setError('No se pudo cargar el expediente');
@@ -124,6 +132,26 @@ function ExpedienteDetailPage() {
       setErrorForm(mensaje);
     } finally {
       setGuardando(false);
+    }
+  }
+
+  // ------------------------------------------
+  // handleCambiarEstado: envía el toggle de activo/inactivo,
+  // tras la confirmación del usuario en el modal.
+  // ------------------------------------------
+  async function handleCambiarEstado() {
+    setErrorEstado('');
+    setCambiandoEstado(true);
+
+    try {
+      await api.put(`/expedientes/${id}`, { activo: !expediente.activo });
+      setMostrarConfirmacion(false);
+      await cargarExpediente();
+    } catch (err) {
+      const mensaje = err.response?.data?.error || 'No se pudo cambiar el estado del expediente';
+      setErrorEstado(mensaje);
+    } finally {
+      setCambiandoEstado(false);
     }
   }
 
@@ -228,11 +256,25 @@ function ExpedienteDetailPage() {
               {expediente.numeroExpediente}
             </h1>
             <p className="mt-1 text-sm text-gray-500">{expediente.caratula}</p>
+            <div className="mt-2">
+              <Badge tone={expediente.activo ? 'green' : 'gray'}>
+                {expediente.activo ? 'Activo' : 'Inactivo'}
+              </Badge>
+            </div>
           </div>
           {!editando && (
-            <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
-              Editar
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
+                Editar
+              </Button>
+              <Button
+                variant={expediente.activo ? 'danger' : 'secondary'}
+                size="sm"
+                onClick={() => setMostrarConfirmacion(true)}
+              >
+                {expediente.activo ? 'Inactivar' : 'Reactivar'}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -247,7 +289,7 @@ function ExpedienteDetailPage() {
             </div>
             <div>
               <dt className="text-xs font-medium uppercase text-gray-400">Fuero</dt>
-              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.fuero)}</dd>
+              <dd className="mt-1 text-gray-800">{etiquetaFuero(expediente.fuero)}</dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase text-gray-400">Juzgado</dt>
@@ -291,7 +333,13 @@ function ExpedienteDetailPage() {
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Fuero" name="fuero" value={form.fuero} onChange={handleChange} />
+              <SelectInput
+                label="Fuero"
+                name="fuero"
+                value={form.fuero}
+                onChange={handleChange}
+                opciones={OPCIONES_FUERO}
+              />
               <Input
                 label="Jurisdicción"
                 name="jurisdiccion"
@@ -369,8 +417,6 @@ function ExpedienteDetailPage() {
           <ul className="mb-4 divide-y divide-gray-100">
             {expediente.partes.map((parte) => (
               <li key={parte.id} className="py-3 first:pt-0">
-                {/* Si esta parte está en edición, mostramos el form
-                    en vez de la fila normal de solo-lectura */}
                 {parteEnEdicionId === parte.id ? (
                   <form
                     onSubmit={handleGuardarEdicionParte}
@@ -418,7 +464,6 @@ function ExpedienteDetailPage() {
                     </div>
                   </form>
                 ) : (
-                  // Fila normal, de solo lectura, con botón para entrar a edición
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{parte.nombre}</p>
@@ -472,6 +517,52 @@ function ExpedienteDetailPage() {
           </form>
         )}
       </div>
+
+      {/* --- Modal de confirmación para inactivar/reactivar --- */}
+      {mostrarConfirmacion && (
+        <Modal
+          title={expediente.activo ? 'Inactivar expediente' : 'Reactivar expediente'}
+          onClose={() => setMostrarConfirmacion(false)}
+        >
+          <div className="px-6 py-5">
+            <p className="text-sm text-gray-700">
+              {expediente.activo ? (
+                <>
+                  ¿Seguro que querés inactivar el expediente{' '}
+                  <strong>{expediente.numeroExpediente}</strong>? Su historial y partes
+                  procesales se conservan.
+                </>
+              ) : (
+                <>
+                  ¿Querés reactivar el expediente <strong>{expediente.numeroExpediente}</strong>?
+                  Va a volver a aparecer como expediente activo.
+                </>
+              )}
+            </p>
+            {errorEstado && <p className="mt-3 text-sm text-red-600">{errorEstado}</p>}
+          </div>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setMostrarConfirmacion(false)}
+              disabled={cambiandoEstado}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={expediente.activo ? 'danger' : 'primary'}
+              onClick={handleCambiarEstado}
+              disabled={cambiandoEstado}
+            >
+              {cambiandoEstado
+                ? 'Guardando...'
+                : expediente.activo
+                ? 'Sí, inactivar'
+                : 'Sí, reactivar'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   );
 }

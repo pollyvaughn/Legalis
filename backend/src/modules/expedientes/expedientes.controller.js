@@ -39,13 +39,16 @@ async function crear(req, res) {
 
 // ------------------------------------------
 // GET /api/expedientes
-// Lista expedientes activos. Soporta ?clienteId=X para filtrar
-// por cliente (vista focal mencionada en el anteproyecto).
+// Lista expedientes. Por defecto solo los activos.
+// Soporta ?clienteId=X para filtrar por cliente (vista focal
+// mencionada en el anteproyecto) y ?incluirInactivos=true para
+// traer también los inactivos — ambos se pueden combinar.
 // ------------------------------------------
 async function listar(req, res) {
   try {
     const { clienteId } = req.query;
-    const expedientes = await expedientesService.listarExpedientes(clienteId);
+    const incluirInactivos = req.query.incluirInactivos === 'true';
+    const expedientes = await expedientesService.listarExpedientes(clienteId, incluirInactivos);
     res.json(expedientes);
   } catch (error) {
     console.error(error);
