@@ -2,13 +2,16 @@
 // EXPEDIENTEDETAILPAGE.JSX
 // Muestra el detalle de un expediente puntual, incluyendo sus
 // partes procesales (vienen incluidas en el GET por id, ver
-// expedientes.service.js del backend). Permite agregar una parte
-// nueva y editar una parte existente, ambos con forms inline
-// (aparecen en la misma pantalla, sin cambiar de página).
+// expedientes.service.js del backend). El botón "Editar" alterna
+// la card principal a un form inline (mismo patrón que
+// ClienteDetailPage — no navega a una página separada).
+// La edición de partes procesales es independiente: cada parte
+// se edita inline por fila, sin relación con el form de arriba.
 // ============================================
 
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
@@ -28,6 +31,12 @@ function ExpedienteDetailPage() {
   const [expediente, setExpediente] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+
+  // Estado del form inline para EDITAR el expediente (datos principales)
+  const [editando, setEditando] = useState(false);
+  const [form, setForm] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [errorForm, setErrorForm] = useState('');
 
   // Estado del form inline para AGREGAR una parte nueva
   const [mostrarFormAgregar, setMostrarFormAgregar] = useState(false);
@@ -51,7 +60,8 @@ function ExpedienteDetailPage() {
   // ------------------------------------------
   // Trae el expediente del backend. Está en una función aparte
   // (no solo adentro del useEffect) porque también la volvemos
-  // a llamar después de agregar/editar una parte, para refrescar.
+  // a llamar después de editar el expediente o agregar/editar
+  // una parte, para refrescar.
   // ------------------------------------------
   async function cargarExpediente() {
     try {
@@ -67,6 +77,52 @@ function ExpedienteDetailPage() {
   useEffect(() => {
     cargarExpediente();
   }, [id]);
+
+  // ------------------------------------------
+  // iniciarEdicion: precarga el form con los datos actuales
+  // del expediente (datos principales, no partes procesales).
+  // ------------------------------------------
+  function iniciarEdicion() {
+    setForm({
+      numeroExpediente: expediente.numeroExpediente,
+      caratula: expediente.caratula,
+      fuero: expediente.fuero || '',
+      jurisdiccion: expediente.jurisdiccion || '',
+      juzgado: expediente.juzgado || '',
+      secretaria: expediente.secretaria || '',
+      objetoJuicio: expediente.objetoJuicio || '',
+      montoJuicio: expediente.montoJuicio ?? '',
+      unidadFiscal: expediente.unidadFiscal || '',
+    });
+    setErrorForm('');
+    setEditando(true);
+  }
+
+  function handleChange(evento) {
+    const { name, value } = evento.target;
+    setForm((formAnterior) => ({ ...formAnterior, [name]: value }));
+  }
+
+  async function handleGuardar(evento) {
+    evento.preventDefault();
+    setErrorForm('');
+    setGuardando(true);
+
+    try {
+      await api.put(`/expedientes/${id}`, {
+        ...form,
+        montoJuicio: form.montoJuicio === '' ? null : form.montoJuicio,
+      });
+
+      setEditando(false);
+      await cargarExpediente();
+    } catch (err) {
+      const mensaje = err.response?.data?.error || 'No se pudo guardar el expediente';
+      setErrorForm(mensaje);
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   // ------------------------------------------
   // handleAgregarParte: envía la nueva parte al backend.
@@ -100,10 +156,10 @@ function ExpedienteDetailPage() {
   }
 
   // ------------------------------------------
-  // iniciarEdicion: precarga el form de edición con los datos
+  // iniciarEdicionParte: precarga el form de edición con los datos
   // actuales de la parte clickeada, y lo abre.
   // ------------------------------------------
-  function iniciarEdicion(parte) {
+  function iniciarEdicionParte(parte) {
     setParteEnEdicionId(parte.id);
     setNombreEdit(parte.nombre);
     setDocumentoEdit(parte.documento || '');
@@ -112,15 +168,15 @@ function ExpedienteDetailPage() {
     setErrorEdit('');
   }
 
-  function cancelarEdicion() {
+  function cancelarEdicionParte() {
     setParteEnEdicionId(null);
   }
 
   // ------------------------------------------
-  // handleGuardarEdicion: envía el PUT con los cambios de la
+  // handleGuardarEdicionParte: envía el PUT con los cambios de la
   // parte que se está editando actualmente.
   // ------------------------------------------
-  async function handleGuardarEdicion(evento) {
+  async function handleGuardarEdicionParte(evento) {
     evento.preventDefault();
     setErrorEdit('');
     setGuardandoEdit(true);
@@ -144,72 +200,228 @@ function ExpedienteDetailPage() {
   }
 
   if (cargando) {
-    return <div className="p-8 text-gray-500 text-sm">Cargando expediente...</div>;
+    return <p className="text-sm text-gray-500">Cargando expediente...</p>;
   }
 
   if (error || !expediente) {
-    return <div className="p-8 text-red-600 text-sm">{error || 'Expediente no encontrado'}</div>;
+    return <p className="text-sm text-red-600">{error || 'Expediente no encontrado'}</p>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <Link to="/expedientes" className="text-sm text-blue-600 hover:underline">
-        ← Volver a expedientes
+    <div>
+      <Link
+        to="/expedientes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+      >
+        <ArrowLeft size={16} strokeWidth={1.75} />
+        Volver a expedientes
       </Link>
 
-      {/* Datos principales del expediente */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mt-4 mb-6">
-        <div className="flex justify-between items-start mb-4">
+      {/* --- Card principal: datos del expediente --- */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+        <div className="mb-5 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">
+            <h1 className="text-xl font-semibold text-gray-900">
               {expediente.numeroExpediente}
             </h1>
-            <p className="text-gray-600 mt-1">{expediente.caratula}</p>
+            <p className="mt-1 text-sm text-gray-500">{expediente.caratula}</p>
           </div>
-          <Link
-            to={`/expedientes/${id}/editar`}
-            className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-200 transition"
-          >
-            Editar
-          </Link>
+          {!editando && (
+            <button
+              onClick={iniciarEdicion}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+            >
+              Editar
+            </button>
+          )}
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <div>
-            <dt className="text-gray-400">Cliente</dt>
-            <dd className="text-gray-700">{expediente.cliente?.nombreRazonSocial}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400">Fuero</dt>
-            <dd className="text-gray-700">{conPlaceholder(expediente.fuero)}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400">Juzgado</dt>
-            <dd className="text-gray-700">{conPlaceholder(expediente.juzgado)}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400">Secretaría</dt>
-            <dd className="text-gray-700">{conPlaceholder(expediente.secretaria)}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400">Objeto del juicio</dt>
-            <dd className="text-gray-700">{conPlaceholder(expediente.objetoJuicio)}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-400">Unidad fiscal</dt>
-            <dd className="text-gray-700">{conPlaceholder(expediente.unidadFiscal)}</dd>
-          </div>
-        </dl>
+        {!editando ? (
+          // ------------------------------------------
+          // VISTA DE SOLO LECTURA
+          // ------------------------------------------
+          <dl className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-gray-100 pt-5 text-sm">
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Cliente</dt>
+              <dd className="mt-1 text-gray-800">{expediente.cliente?.nombreRazonSocial}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Fuero</dt>
+              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.fuero)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Juzgado</dt>
+              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.juzgado)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Secretaría</dt>
+              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.secretaria)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Objeto del juicio</dt>
+              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.objetoJuicio)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Unidad fiscal</dt>
+              <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.unidadFiscal)}</dd>
+            </div>
+          </dl>
+        ) : (
+          // ------------------------------------------
+          // FORM DE EDICIÓN
+          // El cliente NUNCA se muestra como campo editable acá
+          // (misma decisión que en ClienteDetailPage: cambiar de
+          // dueño requiere un flujo explícito, no un campo suelto).
+          // ------------------------------------------
+          <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                N° Expediente
+              </label>
+              <input
+                type="text"
+                name="numeroExpediente"
+                value={form.numeroExpediente}
+                onChange={handleChange}
+                required
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Carátula</label>
+              <input
+                type="text"
+                name="caratula"
+                value={form.caratula}
+                onChange={handleChange}
+                required
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Fuero</label>
+                <input
+                  type="text"
+                  name="fuero"
+                  value={form.fuero}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Jurisdicción
+                </label>
+                <input
+                  type="text"
+                  name="jurisdiccion"
+                  value={form.jurisdiccion}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Juzgado</label>
+                <input
+                  type="text"
+                  name="juzgado"
+                  value={form.juzgado}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Secretaría
+                </label>
+                <input
+                  type="text"
+                  name="secretaria"
+                  value={form.secretaria}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Objeto del juicio
+              </label>
+              <input
+                type="text"
+                name="objetoJuicio"
+                value={form.objetoJuicio}
+                onChange={handleChange}
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Monto del juicio
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  name="montoJuicio"
+                  value={form.montoJuicio}
+                  onChange={handleChange}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Unidad fiscal
+                </label>
+                <input
+                  type="text"
+                  name="unidadFiscal"
+                  value={form.unidadFiscal}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {errorForm && <p className="text-sm text-red-600">{errorForm}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="submit"
+                disabled={guardando}
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {guardando ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditando(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
-      {/* Partes procesales */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Partes procesales</h2>
+      {/* --- Partes procesales (edición inline por fila, independiente de arriba) --- */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Partes procesales</h2>
           {!mostrarFormAgregar && (
             <button
               onClick={() => setMostrarFormAgregar(true)}
-              className="text-sm bg-gray-800 text-white px-3 py-1.5 rounded-md hover:bg-gray-700 transition"
+              className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
             >
               + Agregar parte
             </button>
@@ -218,19 +430,22 @@ function ExpedienteDetailPage() {
 
         {/* Lista de partes ya cargadas */}
         {expediente.partes.length === 0 && !mostrarFormAgregar && (
-          <p className="text-gray-500 text-sm">Todavía no hay partes cargadas.</p>
+          <p className="text-sm text-gray-500">Todavía no hay partes cargadas.</p>
         )}
 
         {expediente.partes.length > 0 && (
-          <ul className="divide-y divide-gray-100 mb-4">
+          <ul className="mb-4 divide-y divide-gray-100">
             {expediente.partes.map((parte) => (
-              <li key={parte.id} className="py-3">
+              <li key={parte.id} className="py-3 first:pt-0">
                 {/* Si esta parte está en edición, mostramos el form
                     en vez de la fila normal de solo-lectura */}
                 {parteEnEdicionId === parte.id ? (
-                  <form onSubmit={handleGuardarEdicion} className="space-y-3 bg-gray-50 rounded-md p-3">
+                  <form
+                    onSubmit={handleGuardarEdicionParte}
+                    className="space-y-3 rounded-lg bg-gray-50 p-4"
+                  >
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-700">
                         Nombre
                       </label>
                       <input
@@ -238,30 +453,30 @@ function ExpedienteDetailPage() {
                         value={nombreEdit}
                         onChange={(e) => setNombreEdit(e.target.value)}
                         required
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-700">
                         Documento
                       </label>
                       <input
                         type="text"
                         value={documentoEdit}
                         onChange={(e) => setDocumentoEdit(e.target.value)}
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-700">
                         Rol procesal
                       </label>
                       <select
                         value={rolEdit}
                         onChange={(e) => setRolEdit(e.target.value)}
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
                       >
                         {ROLES_PROCESALES.map((rol) => (
                           <option key={rol} value={rol}>{rol}</option>
@@ -270,14 +485,14 @@ function ExpedienteDetailPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                      <label className="mb-1 block text-xs font-medium text-gray-700">
                         Rol específico (ej: Apoderado)
                       </label>
                       <input
                         type="text"
                         value={rolEspecificoEdit}
                         onChange={(e) => setRolEspecificoEdit(e.target.value)}
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:border-gray-300 focus:outline-none"
                       />
                     </div>
 
@@ -287,14 +502,14 @@ function ExpedienteDetailPage() {
                       <button
                         type="submit"
                         disabled={guardandoEdit}
-                        className="bg-gray-800 text-white text-sm font-medium px-3 py-1.5 rounded-md hover:bg-gray-700 transition disabled:opacity-50"
+                        className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
                       >
                         {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
                       </button>
                       <button
                         type="button"
-                        onClick={cancelarEdicion}
-                        className="text-sm text-gray-500 hover:text-gray-800 px-3 py-1.5"
+                        onClick={cancelarEdicionParte}
+                        className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
                       >
                         Cancelar
                       </button>
@@ -302,16 +517,16 @@ function ExpedienteDetailPage() {
                   </form>
                 ) : (
                   // Fila normal, de solo lectura, con botón para entrar a edición
-                  <div className="flex justify-between items-center">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{parte.nombre}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm font-medium text-gray-900">{parte.nombre}</p>
+                      <p className="mt-0.5 text-xs text-gray-500">
                         {parte.rol} · {conPlaceholder(parte.documento)} · {conPlaceholder(parte.rolEspecifico)}
                       </p>
                     </div>
                     <button
-                      onClick={() => iniciarEdicion(parte)}
-                      className="text-sm text-blue-600 hover:underline"
+                      onClick={() => iniciarEdicionParte(parte)}
+                      className="text-sm font-medium text-gray-600 hover:text-gray-900"
                     >
                       Editar
                     </button>
@@ -324,40 +539,38 @@ function ExpedienteDetailPage() {
 
         {/* Form inline para agregar una parte nueva */}
         {mostrarFormAgregar && (
-          <form onSubmit={handleAgregarParte} className="border-t border-gray-100 pt-4 space-y-3">
+          <form onSubmit={handleAgregarParte} className="space-y-3 border-t border-gray-100 pt-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre
-              </label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Nombre</label>
               <input
                 type="text"
                 value={nombreParte}
                 onChange={(e) => setNombreParte(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 Documento (opcional)
               </label>
               <input
                 type="text"
                 value={documentoParte}
                 onChange={(e) => setDocumentoParte(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 Rol procesal
               </label>
               <select
                 value={rolParte}
                 onChange={(e) => setRolParte(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               >
                 {ROLES_PROCESALES.map((rol) => (
                   <option key={rol} value={rol}>{rol}</option>
@@ -371,14 +584,14 @@ function ExpedienteDetailPage() {
               <button
                 type="submit"
                 disabled={guardandoParte}
-                className="bg-gray-800 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-gray-700 transition disabled:opacity-50"
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
                 {guardandoParte ? 'Guardando...' : 'Guardar parte'}
               </button>
               <button
                 type="button"
                 onClick={() => setMostrarFormAgregar(false)}
-                className="text-sm text-gray-500 hover:text-gray-800 px-4 py-2"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
               >
                 Cancelar
               </button>

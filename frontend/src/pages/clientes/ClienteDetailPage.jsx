@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import api from '../../api/axios';
 
 function ClienteDetailPage() {
@@ -91,33 +92,41 @@ function ClienteDetailPage() {
   }
 
   if (cargando) {
-    return <div className="p-8 text-gray-500 text-sm">Cargando cliente...</div>;
+    return <p className="text-sm text-gray-500">Cargando cliente...</p>;
   }
 
   if (error || !cliente) {
-    return <div className="p-8 text-red-600 text-sm">{error || 'Cliente no encontrado'}</div>;
+    return <p className="text-sm text-red-600">{error || 'Cliente no encontrado'}</p>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <Link to="/clientes" className="text-sm text-blue-600 hover:underline">
-        ← Volver a clientes
+    <div>
+      <Link
+        to="/clientes"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+      >
+        <ArrowLeft size={16} strokeWidth={1.75} />
+        Volver a clientes
       </Link>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mt-4 mb-6 max-w-2xl">
-        <div className="flex justify-between items-start mb-4">
+      {/* --- Card principal: datos del cliente --- */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+        <div className="mb-5 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">
+            <h1 className="text-xl font-semibold text-gray-900">
               {cliente.nombreRazonSocial}
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {cliente.tipo === 'FISICA' ? 'Persona Física' : 'Persona Jurídica'} · RUC {cliente.ruc}
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                {cliente.tipo === 'FISICA' ? 'Persona física' : 'Persona jurídica'}
+              </span>
+              <span className="text-sm text-gray-500">RUC {cliente.ruc}</span>
+            </div>
           </div>
           {!editando && (
             <button
               onClick={iniciarEdicion}
-              className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-200 transition"
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
             >
               Editar
             </button>
@@ -128,41 +137,47 @@ function ClienteDetailPage() {
           // ------------------------------------------
           // VISTA DE SOLO LECTURA
           // ------------------------------------------
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-gray-100 pt-5 text-sm">
             <div>
-              <dt className="text-gray-400">Tipo de atención</dt>
-              <dd className="text-gray-700">{cliente.tipoAtencion}</dd>
+              <dt className="text-xs font-medium uppercase text-gray-400">Tipo de atención</dt>
+              <dd className="mt-1 text-gray-800">{cliente.tipoAtencion}</dd>
             </div>
             <div>
-              <dt className="text-gray-400">Email</dt>
-              <dd className="text-gray-700">{cliente.email || '—'}</dd>
+              <dt className="text-xs font-medium uppercase text-gray-400">Email</dt>
+              <dd className="mt-1 text-gray-800">{cliente.email || '—'}</dd>
             </div>
             <div>
-              <dt className="text-gray-400">Teléfono</dt>
-              <dd className="text-gray-700">{cliente.telefono || '—'}</dd>
+              <dt className="text-xs font-medium uppercase text-gray-400">Teléfono</dt>
+              <dd className="mt-1 text-gray-800">{cliente.telefono || '—'}</dd>
             </div>
             <div>
-              <dt className="text-gray-400">Dirección</dt>
-              <dd className="text-gray-700">{cliente.direccion || '—'}</dd>
+              <dt className="text-xs font-medium uppercase text-gray-400">Dirección</dt>
+              <dd className="mt-1 text-gray-800">{cliente.direccion || '—'}</dd>
             </div>
 
             {cliente.tipo === 'FISICA' && (
               <>
                 <div>
-                  <dt className="text-gray-400">Cédula</dt>
-                  <dd className="text-gray-700">{cliente.personaFisica?.cedula || '—'}</dd>
+                  <dt className="text-xs font-medium uppercase text-gray-400">Cédula</dt>
+                  <dd className="mt-1 text-gray-800">{cliente.personaFisica?.cedula || '—'}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-400">Dígito verificador</dt>
-                  <dd className="text-gray-700">{cliente.personaFisica?.digitoVerificador ?? '—'}</dd>
+                  <dt className="text-xs font-medium uppercase text-gray-400">
+                    Dígito verificador
+                  </dt>
+                  <dd className="mt-1 text-gray-800">
+                    {cliente.personaFisica?.digitoVerificador ?? '—'}
+                  </dd>
                 </div>
               </>
             )}
 
             {cliente.tipo === 'JURIDICA' && (
               <div>
-                <dt className="text-gray-400">Tipo societario</dt>
-                <dd className="text-gray-700">{cliente.personaJuridica?.tipoSocietario || '—'}</dd>
+                <dt className="text-xs font-medium uppercase text-gray-400">Tipo societario</dt>
+                <dd className="mt-1 text-gray-800">
+                  {cliente.personaJuridica?.tipoSocietario || '—'}
+                </dd>
               </div>
             )}
           </dl>
@@ -171,9 +186,9 @@ function ClienteDetailPage() {
           // FORM DE EDICIÓN
           // El tipo NUNCA se muestra como campo editable acá.
           // ------------------------------------------
-          <form onSubmit={handleGuardar} className="space-y-4">
+          <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 {cliente.tipo === 'FISICA' ? 'Nombre completo' : 'Razón social'}
               </label>
               <input
@@ -182,87 +197,90 @@ function ClienteDetailPage() {
                 value={form.nombreRazonSocial}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">RUC</label>
-              <input
-                type="text"
-                name="ruc"
-                value={form.ruc}
-                onChange={handleChange}
-                required
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipo de atención
-              </label>
-              <select
-                name="tipoAtencion"
-                value={form.tipoAtencion}
-                onChange={handleChange}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="JUDICIAL">Judicial</option>
-                <option value="EXTRAJUDICIAL">Extrajudicial</option>
-                <option value="AMBOS">Ambos</option>
-              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">RUC</label>
+                <input
+                  type="text"
+                  name="ruc"
+                  value={form.ruc}
+                  onChange={handleChange}
+                  required
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Tipo de atención
+                </label>
+                <select
+                  name="tipoAtencion"
+                  value={form.tipoAtencion}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
+                >
+                  <option value="JUDICIAL">Judicial</option>
+                  <option value="EXTRAJUDICIAL">Extrajudicial</option>
+                  <option value="AMBOS">Ambos</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
                 <input
                   type="email"
                   name="email"
                   value={form.email}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Teléfono</label>
                 <input
                   type="text"
                   name="telefono"
                   value={form.telefono}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Dirección</label>
               <input
                 type="text"
                 name="direccion"
                 value={form.direccion}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
               />
             </div>
 
             {cliente.tipo === 'FISICA' && (
-              <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div className="space-y-4 border-t border-gray-100 pt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cédula</label>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      Cédula
+                    </label>
                     <input
                       type="text"
                       name="cedula"
                       value={form.cedula}
                       onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
                       Dígito verificador
                     </label>
                     <input
@@ -271,12 +289,12 @@ function ClienteDetailPage() {
                       name="digitoVerificador"
                       value={form.digitoVerificador}
                       onChange={handleChange}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
                     Fecha de nacimiento
                   </label>
                   <input
@@ -284,16 +302,16 @@ function ClienteDetailPage() {
                     name="fechaNacimiento"
                     value={form.fechaNacimiento}
                     onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                   />
                 </div>
               </div>
             )}
 
             {cliente.tipo === 'JURIDICA' && (
-              <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div className="space-y-4 border-t border-gray-100 pt-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
                     Tipo societario
                   </label>
                   <input
@@ -301,11 +319,11 @@ function ClienteDetailPage() {
                     name="tipoSocietario"
                     value={form.tipoSocietario}
                     onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
                     Fecha de constitución
                   </label>
                   <input
@@ -313,7 +331,7 @@ function ClienteDetailPage() {
                     name="fechaConstitucion"
                     value={form.fechaConstitucion}
                     onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-gray-300 focus:outline-none"
                   />
                 </div>
               </div>
@@ -325,14 +343,14 @@ function ClienteDetailPage() {
               <button
                 type="submit"
                 disabled={guardando}
-                className="bg-gray-800 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-gray-700 transition disabled:opacity-50"
+                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
               </button>
               <button
                 type="button"
                 onClick={() => setEditando(false)}
-                className="text-sm text-gray-500 hover:text-gray-800 px-4 py-2"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
               >
                 Cancelar
               </button>
@@ -341,22 +359,22 @@ function ClienteDetailPage() {
         )}
       </div>
 
-      {/* Expedientes de este cliente (vienen incluidos en el GET por id) */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 max-w-2xl">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Expedientes</h2>
+      {/* --- Expedientes de este cliente (vienen incluidos en el GET por id) --- */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6">
+        <h2 className="mb-4 text-base font-semibold text-gray-900">Expedientes</h2>
         {cliente.expedientes.length === 0 ? (
-          <p className="text-gray-500 text-sm">Este cliente no tiene expedientes cargados.</p>
+          <p className="text-sm text-gray-500">Este cliente no tiene expedientes cargados.</p>
         ) : (
           <ul className="divide-y divide-gray-100">
             {cliente.expedientes.map((exp) => (
-              <li key={exp.id} className="py-2">
+              <li key={exp.id} className="py-3 first:pt-0 last:pb-0">
                 <Link
                   to={`/expedientes/${exp.id}`}
-                  className="text-sm text-blue-600 hover:underline font-medium"
+                  className="text-sm font-medium text-gray-900 hover:underline"
                 >
                   {exp.numeroExpediente}
                 </Link>
-                <p className="text-xs text-gray-500">{exp.caratula}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{exp.caratula}</p>
               </li>
             ))}
           </ul>

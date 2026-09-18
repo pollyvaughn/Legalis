@@ -1,20 +1,23 @@
 // ============================================
 // EXPEDIENTESLISTPAGE.JSX
 // Pide la lista de expedientes activos al backend y la muestra
-// en una tabla. Cada fila lleva al detalle de ese expediente.
+// en una tabla estilo Legalis. Cada fila lleva al detalle de
+// ese expediente. El botón "+ Nuevo expediente" abre
+// ExpedienteFormModal, que al crear navega directo al detalle.
 // ============================================
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import api from '../../api/axios';
-import { useAuth } from '../../context/AuthContext';
+import ExpedienteFormModal from './ExpedienteFormModal';
 
 function ExpedientesListPage() {
   const [expedientes, setExpedientes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-
-  const { usuario, logout } = useAuth();
+  const [busqueda, setBusqueda] = useState(''); // filtro de texto local, no pega al backend todavía
+  const [mostrarModal, setMostrarModal] = useState(false);
 
   // ------------------------------------------
   // useEffect con array vacío [] al final: se ejecuta UNA sola
@@ -36,96 +39,100 @@ function ExpedientesListPage() {
     cargarExpedientes();
   }, []);
 
+  // Filtro simple por número, carátula o cliente, en memoria (client-side).
+  const expedientesFiltrados = expedientes.filter((exp) => {
+    const texto = busqueda.trim().toLowerCase();
+    if (!texto) return true;
+    return (
+      exp.numeroExpediente?.toLowerCase().includes(texto) ||
+      exp.caratula?.toLowerCase().includes(texto) ||
+      exp.cliente?.nombreRazonSocial?.toLowerCase().includes(texto)
+    );
+  });
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      {/* Encabezado */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">Expedientes</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">
-            {usuario?.nombre} ({usuario?.rol})
-          </span>
-          <button
-            onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-800 underline"
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </div>
-
-      {/* Navegación simple entre módulos, mientras no hay un layout con sidebar */}
-      <div className="mb-4 flex gap-4 text-sm">
-        <span className="text-gray-800 font-medium">Expedientes</span>
-        <Link to="/clientes" className="text-blue-600 hover:underline">
-          Clientes
-        </Link>
-      </div>
-
-      {/* Botón de nuevo expediente */}
-      <div className="mb-4">
-        <Link
-          to="/expedientes/nuevo"
-          className="inline-block bg-gray-800 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-gray-700 transition"
+    <div>
+      {/* --- Encabezado de la página: título + acción principal --- */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Expedientes</h1>
+        <button
+          onClick={() => setMostrarModal(true)}
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
           + Nuevo expediente
-        </Link>
+        </button>
       </div>
 
-      {/* Estado: cargando */}
-      {cargando && (
-        <p className="text-gray-500 text-sm">Cargando expedientes...</p>
-      )}
+      {cargando && <p className="text-sm text-gray-500">Cargando expedientes...</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {/* Estado: error */}
-      {error && (
-        <p className="text-red-600 text-sm">{error}</p>
-      )}
+      {!cargando && !error && (
+        <div className="rounded-xl border border-gray-200 bg-white">
+          {/* --- Barra de búsqueda + contador --- */}
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div className="relative w-80">
+              <Search
+                size={16}
+                strokeWidth={1.75}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar N° expediente, carátula, cliente..."
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+              />
+            </div>
+            <span className="text-sm text-gray-500">
+              {expedientesFiltrados.length} expediente{expedientesFiltrados.length !== 1 && 's'}
+            </span>
+          </div>
 
-      {/* Estado: sin expedientes */}
-      {!cargando && !error && expedientes.length === 0 && (
-        <p className="text-gray-500 text-sm">
-          Todavía no hay expedientes cargados.
-        </p>
-      )}
-
-      {/* Estado: tabla con datos */}
-      {!cargando && !error && expedientes.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-100 text-gray-600 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3">N° Expediente</th>
-                <th className="px-4 py-3">Carátula</th>
-                <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Fuero</th>
-              </tr>
-            </thead>
-            <tbody>
-              {expedientes.map((expediente) => (
-                <tr
-                  key={expediente.id}
-                  className="border-t border-gray-100 hover:bg-gray-50"
-                >
-                  {/* Toda la fila es clickeable hacia el detalle */}
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/expedientes/${expediente.id}`}
-                      className="text-blue-600 hover:underline font-medium"
-                    >
-                      {expediente.numeroExpediente}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{expediente.caratula}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {expediente.cliente?.nombreRazonSocial}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{expediente.fuero}</td>
+          {expedientesFiltrados.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-gray-500">
+              Todavía no hay expedientes cargados.
+            </p>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs font-medium text-gray-500">
+                  <th className="px-5 py-3">N° Expediente</th>
+                  <th className="px-5 py-3">Carátula</th>
+                  <th className="px-5 py-3">Cliente</th>
+                  <th className="px-5 py-3">Fuero</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {expedientesFiltrados.map((expediente) => (
+                  <tr
+                    key={expediente.id}
+                    className="border-t border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="px-5 py-3">
+                      <Link
+                        to={`/expedientes/${expediente.id}`}
+                        className="font-medium text-gray-900 hover:underline"
+                      >
+                        {expediente.numeroExpediente}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-gray-600">{expediente.caratula}</td>
+                    <td className="px-5 py-3 text-gray-600">
+                      {expediente.cliente?.nombreRazonSocial}
+                    </td>
+                    <td className="px-5 py-3 text-gray-600">{expediente.fuero || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
+      )}
+
+      {/* --- Modal de alta de expediente (overlay) --- */}
+      {mostrarModal && (
+        <ExpedienteFormModal onClose={() => setMostrarModal(false)} />
       )}
     </div>
   );
