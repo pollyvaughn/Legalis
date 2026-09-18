@@ -10,14 +10,17 @@
 
 import Sidebar from "./Sidebar";
 
-// Formatea la fecha actual en español, ej: "miércoles, 17 de septiembre de 2026"
+// Formatea la fecha actual en español, ej: "Miércoles, 17 de septiembre de 2026"
 function fechaHoyFormateada() {
-  return new Date().toLocaleDateString("es-PY", {
+  const fecha = new Date().toLocaleDateString("es-PY", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+  // Solo el día (primer carácter); no usar className "capitalize"
+  // porque también capitaliza "de" y el mes.
+  return fecha.charAt(0).toUpperCase() + fecha.slice(1);
 }
 
 export default function AppLayout({ children }) {
@@ -29,9 +32,9 @@ export default function AppLayout({ children }) {
         {/* --- Header superior --- */}
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4">
           <h2 className="text-base font-medium text-slate-800">
-            Estudio Romero & Asociados {/* placeholder Figma, sin dato real todavía */}
+            Legalis
           </h2>
-          <span className="text-sm text-slate-500 capitalize">
+          <span className="text-sm text-slate-500">
             {fechaHoyFormateada()}
           </span>
         </header>
