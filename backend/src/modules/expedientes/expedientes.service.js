@@ -20,13 +20,29 @@ function siVino(valor) {
 }
 
 // ------------------------------------------
+// HELPER: limpiarTexto
+// Quita espacios sobrantes al inicio y al final ("Juzgado 3 " -> "Juzgado 3").
+// Se aplica a los campos que forman la unicidad del expediente
+// (numero, juzgado, carátula) para que un espacio de más no
+// permita registrar un duplicado real.
+// Si el valor no vino (undefined) o es null, lo devuelve tal cual
+// para respetar el comportamiento de siVino en los PUT parciales.
+// ------------------------------------------
+function limpiarTexto(valor) {
+  return typeof valor === 'string' ? valor.trim() : valor;
+}
+
+// ------------------------------------------
 // CREAR EXPEDIENTE
 // Requiere un clienteId válido (FK obligatoria).
+// anio y juzgado son obligatorios (parte de la identificación única).
+// estadoProcesal es opcional: si no viene, Prisma usa el default (EN_TRAMITE).
 // ------------------------------------------
 async function crearExpediente(datos) {
   const {
     clienteId,
     numeroExpediente,
+    anio,
     caratula,
     fuero,
     jurisdiccion,
@@ -35,21 +51,24 @@ async function crearExpediente(datos) {
     objetoJuicio,
     montoJuicio,
     unidadFiscal,
+    estadoProcesal,
   } = datos;
 
   return prisma.expediente.create({
     data: {
       clienteId: Number(clienteId),
-      numeroExpediente,
-      caratula,
+      numeroExpediente: limpiarTexto(numeroExpediente),
+      anio: Number(anio), // llega como string desde un input HTML
+      caratula: limpiarTexto(caratula),
       fuero,
       jurisdiccion,
-      juzgado,
+      juzgado: limpiarTexto(juzgado),
       secretaria,
       objetoJuicio,
       // montoJuicio es opcional; si viene, lo convertimos a número
       montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : null,
       unidadFiscal,
+      estadoProcesal: siVino(estadoProcesal), // undefined = usa el default del schema
     },
     // Incluye los datos del cliente en la respuesta, útil para el frontend
     include: {
@@ -59,33 +78,90 @@ async function crearExpediente(datos) {
 }
 
 // ------------------------------------------
-// LISTAR EXPEDIENTES
-// Por defecto solo trae expedientes activos. Pasando
-// incluirInactivos = true se traen todos (mismo patrón que
-// obtenerExpedientePorId y clientes.service.js, para que el
-// frontend pueda ofrecer un filtro Activos/Inactivos/Todos).
-// Sigue permitiendo filtrar opcionalmente por clienteId (para
-// la "vista focal" del Módulo 1) — ambos filtros son compatibles
-// entre sí (ej: "todos los expedientes, activos o no, del cliente X").
+// LISTAR EXPEDIENTES (con filtros y paginación)
+// Recibe un objeto de opciones para no depender del orden de
+// parámetros posicionales (ya son demasiados):
+//   clienteId        -> vista focal por cliente
+//   incluirInactivos -> false por defecto: solo activos
+//   fuero            -> enum Fuero (match exacto)
+//   estadoProcesal   -> enum EstadoProcesal (match exacto)
+//   anio             -> año del expediente (match exacto)
+//   juzgado          -> búsqueda parcial, sin distinguir mayúsculas
+//   busqueda         -> texto libre: busca en número, carátula y
+//                       nombre/razón social del cliente
+//   pagina / limite  -> paginación (página 1 por defecto, 10 por página)
+//
+// Devuelve { datos, total, pagina, limite, totalPaginas } para que
+// el frontend pueda dibujar los controles de paginación.
 // ------------------------------------------
-async function listarExpedientes(clienteId, incluirInactivos = false) {
+async function listarExpedientes(opciones = {}) {
+  const {
+    clienteId,
+    incluirInactivos = false,
+    fuero,
+    estadoProcesal,
+    anio,
+    juzgado,
+    busqueda,
+    pagina = 1,
+    limite = 10,
+  } = opciones;
+
+  // Arma el filtro dinámicamente: solo agrega lo que vino
   const where = {};
 
   if (!incluirInactivos) {
     where.activo = true;
   }
-
   if (clienteId) {
     where.clienteId = Number(clienteId);
   }
+  if (fuero) {
+    where.fuero = fuero;
+  }
+  if (estadoProcesal) {
+    where.estadoProcesal = estadoProcesal;
+  }
+  if (anio) {
+    where.anio = Number(anio);
+  }
+  if (juzgado) {
+    // contains + insensitive = "LIKE %texto%" sin importar mayúsculas
+    where.juzgado = { contains: juzgado, mode: 'insensitive' };
+  }
+  if (busqueda) {
+    // OR: alcanza con que coincida en uno de los tres campos
+    where.OR = [
+      { numeroExpediente: { contains: busqueda, mode: 'insensitive' } },
+      { caratula: { contains: busqueda, mode: 'insensitive' } },
+      { cliente: { nombreRazonSocial: { contains: busqueda, mode: 'insensitive' } } },
+    ];
+  }
 
-  return prisma.expediente.findMany({
-    where,
-    include: {
-      cliente: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  // Normaliza paginación: números enteros positivos, máximo 100 por página
+  const paginaNum = Math.max(1, Number(pagina) || 1);
+  const limiteNum = Math.min(100, Math.max(1, Number(limite) || 10));
+
+  // $transaction con dos consultas: la página de datos y el total
+  // (el total ignora skip/take pero respeta los filtros)
+  const [datos, total] = await prisma.$transaction([
+    prisma.expediente.findMany({
+      where,
+      include: { cliente: true },
+      orderBy: { createdAt: 'desc' },
+      skip: (paginaNum - 1) * limiteNum, // cuántos saltear
+      take: limiteNum,                   // cuántos traer
+    }),
+    prisma.expediente.count({ where }),
+  ]);
+
+  return {
+    datos,
+    total,
+    pagina: paginaNum,
+    limite: limiteNum,
+    totalPaginas: Math.ceil(total / limiteNum),
+  };
 }
 
 // ------------------------------------------
@@ -126,11 +202,15 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
 // que ya puede tener partes procesales, gastos u honorarios
 // asociados es una operación delicada que merece su propio flujo
 // explícito más adelante, no un campo más del form de edición.
-// numeroExpediente sí se puede editar (permite corregir un typo).
+// numeroExpediente, anio, juzgado y caratula sí se pueden editar
+// (permite corregir un typo o registrar un traslado de juzgado);
+// si el resultado choca con otro expediente, Prisma lanza P2002
+// y el controller lo traduce a un 409.
 // ------------------------------------------
 async function actualizarExpediente(id, datos) {
   const {
     numeroExpediente,
+    anio,
     caratula,
     fuero,
     jurisdiccion,
@@ -139,21 +219,24 @@ async function actualizarExpediente(id, datos) {
     objetoJuicio,
     montoJuicio,
     unidadFiscal,
+    estadoProcesal,
     activo,
   } = datos;
 
   return prisma.expediente.update({
     where: { id: Number(id) },
     data: {
-      numeroExpediente: siVino(numeroExpediente),
-      caratula: siVino(caratula),
+      numeroExpediente: siVino(limpiarTexto(numeroExpediente)),
+      anio: anio !== undefined ? Number(anio) : undefined,
+      caratula: siVino(limpiarTexto(caratula)),
       fuero: siVino(fuero),
       jurisdiccion: siVino(jurisdiccion),
-      juzgado: siVino(juzgado),
+      juzgado: siVino(limpiarTexto(juzgado)),
       secretaria: siVino(secretaria),
       objetoJuicio: siVino(objetoJuicio),
       montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : undefined,
       unidadFiscal: siVino(unidadFiscal),
+      estadoProcesal: siVino(estadoProcesal),
       activo: siVino(activo),
     },
     include: {

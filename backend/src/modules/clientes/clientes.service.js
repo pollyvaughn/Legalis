@@ -40,6 +40,7 @@ async function crearCliente(datos) {
     // Campos específicos de persona jurídica
     tipoSocietario,
     fechaConstitucion,
+    representanteLegal, // NUEVO: quien representa a la empresa (texto libre, opcional)
   } = datos;
 
   // Arma el objeto base común a ambos tipos
@@ -71,6 +72,7 @@ async function crearCliente(datos) {
       create: {
         tipoSocietario,
         fechaConstitucion: fechaConstitucion ? new Date(fechaConstitucion) : null,
+        representanteLegal, // NUEVO
       },
     };
   }
@@ -168,6 +170,7 @@ async function actualizarCliente(id, datos) {
     // Extensión jurídica
     tipoSocietario,
     fechaConstitucion,
+    representanteLegal, // NUEVO (en el destructuring)
   } = datos;
 
   const clienteId = Number(id);
@@ -190,7 +193,7 @@ async function actualizarCliente(id, datos) {
     // Según el tipo YA GUARDADO en la base (no editable), actualiza
     // la extensión correspondiente, solo si vino algún dato para ella.
     const hayDatosFisica = cedula !== undefined || digitoVerificador !== undefined || fechaNacimiento !== undefined;
-    const hayDatosJuridica = tipoSocietario !== undefined || fechaConstitucion !== undefined;
+    const hayDatosJuridica = tipoSocietario !== undefined || fechaConstitucion !== undefined || representanteLegal !== undefined;
 
     if (clienteActualizado.tipo === 'FISICA' && hayDatosFisica) {
       await tx.clientePersonaFisica.update({
@@ -215,6 +218,7 @@ async function actualizarCliente(id, datos) {
           fechaConstitucion: fechaConstitucion !== undefined
             ? (fechaConstitucion ? new Date(fechaConstitucion) : null)
             : undefined,
+          representanteLegal: siVino(representanteLegal), // NUEVO
         },
       });
     }

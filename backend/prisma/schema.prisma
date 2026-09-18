@@ -48,6 +48,21 @@ enum Fuero {
 }
 
 // ------------------------------------------
+// ESTADO PROCESAL
+// Situación actual del expediente dentro del proceso judicial.
+// Es enum (no texto libre) para evitar variantes como
+// "En trámite" / "en tramite" que romperían los filtros.
+// Agregar un valor nuevo a futuro = una migración chica.
+// ------------------------------------------
+enum EstadoProcesal {
+  EN_TRAMITE
+  EN_APELACION
+  SUSPENDIDO
+  ARCHIVADO
+  CONCLUIDO
+}
+
+// ------------------------------------------
 // ROL DE PARTE PROCESAL
 // Categorías amplias y estables, independientes del fuero.
 // El matiz exacto (Actor, Imputado, Víctima...) va en
@@ -120,6 +135,7 @@ model ClientePersonaJuridica {
 
   tipoSocietario    String   // ej. "SA", "SRL", "Fundación" — texto libre por ahora, no enum (puede variar mucho)
   fechaConstitucion DateTime?
+  representanteLegal String? // NUEVO: quien representa a la empresa en general. Texto simple y opcional; si a futuro se necesita como entidad (con CI, poder, etc.), se migra a tabla propia.
 
   @@map("clientes_persona_juridica")
 }
@@ -129,28 +145,40 @@ model ClientePersonaJuridica {
 // Registro de casos judiciales y extrajudiciales.
 // El monto del juicio es opcional porque no todo expediente lo tiene
 // (ej. trámites o asesorías sin monto litigioso definido).
+//
+// IDENTIFICACIÓN ÚNICA (regla de negocio validada con la abogada):
+// en Paraguay el número de expediente NO es único por sí solo:
+// la numeración reinicia cada año y un expediente puede trasladarse
+// a otro juzgado. Por eso se identifica por la combinación
+// número + año + juzgado + carátula (ver @@unique al final).
 // ------------------------------------------
 model Expediente {
   id              Int       @id @default(autoincrement())
   clienteId       Int
   cliente         Cliente   @relation(fields: [clienteId], references: [id])
 
-  numeroExpediente String   @unique
+  numeroExpediente String   // ya NO es @unique solo: la unicidad es compuesta (ver abajo)
+  anio            Int       // NUEVO: año del expediente (la numeración reinicia cada año). Ej: 2024
   caratula        String
-  fuero           Fuero?    // NUEVO: ahora es enum, no String — ver más abajo
+  fuero           Fuero?
   jurisdiccion    String?
-  juzgado         String?
-  secretaria      String?   // NUEVO: Secretaría del juzgado (ej. "Secretaría N°1"). Opcional por ahora para no romper expedientes ya cargados sin este dato.
-  objetoJuicio    String?   // NUEVO: descripción breve del tipo de proceso (ej. "Cobro de Guaraníes", "Sucesión Intestada", "Estafa")
-  montoJuicio     Decimal?  @db.Decimal(15, 2) // Ya era opcional: no aplica en fueros como Penal
-  unidadFiscal    String?   // NUEVO: exclusivo de fuero Penal (ej. "Unidad Penal N°5"). Null en otros fueros.
+  juzgado         String    // CAMBIO: ahora obligatorio. Sin juzgado no se puede validar duplicados.
+  secretaria      String?   // Secretaría del juzgado (ej. "Secretaría N°1")
+  objetoJuicio    String?   // descripción breve del tipo de proceso (ej. "Cobro de Guaraníes", "Sucesión Intestada")
+  montoJuicio     Decimal?  @db.Decimal(15, 2) // 15 dígitos en total, 2 decimales. Opcional: no aplica en fueros como Penal
+  unidadFiscal    String?   // exclusivo de fuero Penal (ej. "Unidad Penal N°5"). Null en otros fueros.
+  estadoProcesal  EstadoProcesal @default(EN_TRAMITE) // NUEVO: situación procesal actual
 
   activo          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // NUEVO: relación 1:N con las partes procesales del expediente
+  // Relación 1:N con las partes procesales del expediente
   partes          ParteProcesal[]
+
+  // Unicidad compuesta: mismo número + año + juzgado + carátula = duplicado.
+  // Si cambia cualquiera de los cuatro, se considera un expediente distinto.
+  @@unique([numeroExpediente, anio, juzgado, caratula])
 
   @@map("expedientes")
 }
