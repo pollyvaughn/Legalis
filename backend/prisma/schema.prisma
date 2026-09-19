@@ -103,6 +103,8 @@ model Cliente {
   expedientes     Expediente[]
   partesProcesales ParteProcesal[]  // NUEVO: casos donde este cliente es parte de un expediente (propio o ajeno)
 
+  obligaciones  ObligacionPeriodica[]   // Módulo 1.3
+  tramites      Tramite[]               // Módulo 1.3
   @@map("clientes") // nombre real de la tabla en PostgreSQL (snake_case, convención SQL)
 }
 
@@ -179,6 +181,8 @@ model Expediente {
   // Unicidad compuesta: mismo número + año + juzgado + carátula = duplicado.
   // Si cambia cualquiera de los cuatro, se considera un expediente distinto.
   @@unique([numeroExpediente, anio, juzgado, caratula])
+
+  documentosRecibidos DocumentoRecibido[]   // Módulo 1.3
 
   @@map("expedientes")
 }
@@ -292,4 +296,123 @@ model PlantillaEscrito {
   actualizadoEn DateTime         @updatedAt         // Prisma lo actualiza solo en cada edición
 
   @@index([fuero, clase, categoria])                // acelera los filtros combinados de la pantalla
+}
+
+// ============================================================
+// MÓDULO 1.3 — ASESORÍAS CONTABLES Y TRÁMITES
+// Catálogo de trámites -> obligaciones periódicas -> vencimientos (Tramite)
+// + registro de recepción de documentos.
+// Las fechas de vencimiento se guardan como @db.Date (solo día, sin hora).
+// ============================================================
+
+// Cada cuánto se repite una obligación periódica
+enum PeriodicidadTramite {
+  MENSUAL   // vence todos los meses (día según terminación de RUC)
+  ANUAL     // vence una vez al año, en el mes elegido (mesAnual)
+}
+
+// Estado de un vencimiento/trámite (confirmados por la abogada)
+enum EstadoTramite {
+  PENDIENTE
+  EN_PROCESO
+  PRESENTADO
+  FINALIZADO
+}
+
+// ------------------------------------------------------------
+// CATÁLOGO DE TIPOS DE TRÁMITE ("catastrar" un trámite una sola vez)
+// Si ya tiene trámites asociados no se borra: se inactiva (activo = false).
+// ------------------------------------------------------------
+model TipoTramite {
+  id            Int      @id @default(autoincrement())
+  nombre        String   @unique @db.VarChar(120)   // ej: "IVA general" (único en el catálogo)
+  descripcion   String?  @db.VarChar(300)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  obligaciones  ObligacionPeriodica[]
+  tramites      Tramite[]
+}
+
+// ------------------------------------------------------------
+// OBLIGACIÓN PERIÓDICA: "a este cliente le presento este trámite
+// todos los meses / todos los años". Genera los vencimientos.
+// Inactivarla (activa = false) frena la generación futura y
+// conserva el historial.
+// ------------------------------------------------------------
+model ObligacionPeriodica {
+  id             Int                 @id @default(autoincrement())
+  clienteId      Int
+  cliente        Cliente             @relation(fields: [clienteId], references: [id])
+  tipoTramiteId  Int
+  tipoTramite    TipoTramite         @relation(fields: [tipoTramiteId], references: [id])
+
+  periodicidad   PeriodicidadTramite
+  mesAnual       Int?                // 1 a 12; solo se usa si es ANUAL (mes en que vence cada año)
+  observaciones  String?             @db.VarChar(300)
+  activa         Boolean             @default(true)
+  creadoEn       DateTime            @default(now())
+  actualizadoEn  DateTime            @updatedAt
+
+  tramites       Tramite[]
+
+  @@index([clienteId])
+}
+
+// ------------------------------------------------------------
+// TRÁMITE = un vencimiento concreto con su estado.
+//  - Único: obligacionId = null, fecha cargada a mano.
+//  - Periódico: lo genera el sistema desde una ObligacionPeriodica.
+// El calendario del Módulo 2 lee esta misma tabla.
+// ------------------------------------------------------------
+model Tramite {
+  id               Int                  @id @default(autoincrement())
+  clienteId        Int
+  cliente          Cliente              @relation(fields: [clienteId], references: [id])
+  tipoTramiteId    Int
+  tipoTramite      TipoTramite          @relation(fields: [tipoTramiteId], references: [id])
+
+  obligacionId     Int?                 // null = trámite único (puntual)
+  obligacion       ObligacionPeriodica? @relation(fields: [obligacionId], references: [id])
+  periodo          String?              @db.VarChar(7)   // "AAAA-MM" del mes de vencimiento; solo en los generados
+
+  fechaVencimiento DateTime             @db.Date         // solo fecha, sin hora
+  estado           EstadoTramite        @default(PENDIENTE)
+  descripcion      String?              @db.VarChar(300)
+  creadoEn         DateTime             @default(now())
+  actualizadoEn    DateTime             @updatedAt
+
+  documentos       DocumentoRecibido[]
+
+  // Evita generar dos veces el mismo período de una obligación.
+  // (Postgres trata los NULL como distintos: los trámites únicos no chocan entre sí.)
+  @@unique([obligacionId, periodo])
+  @@index([clienteId])
+  @@index([fechaVencimiento])
+  @@index([estado])
+}
+
+// ------------------------------------------------------------
+// DOCUMENTO RECIBIDO: registro de recepción (NO guarda archivos).
+// Va enganchado a un trámite (documentos contables) O a un
+// expediente (documentos de juicios): uno de los dos, nunca ambos.
+// Esa regla la valida el service (Prisma no tiene CHECK).
+// onDelete: Restrict = no se puede borrar un trámite/expediente
+// que tenga documentos registrados.
+// ------------------------------------------------------------
+model DocumentoRecibido {
+  id             Int         @id @default(autoincrement())
+  tramiteId      Int?
+  tramite        Tramite?    @relation(fields: [tramiteId], references: [id], onDelete: Restrict)
+  expedienteId   Int?
+  expediente     Expediente? @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+
+  tipoDocumento  String      @db.VarChar(150)   // ej: "Facturas de compras", "Cédula"
+  fechaRecepcion DateTime    @db.Date
+  observaciones  String?     @db.VarChar(500)
+  creadoEn       DateTime    @default(now())
+
+  @@index([tramiteId])
+  @@index([expedienteId])
 }
