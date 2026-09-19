@@ -60,4 +60,8 @@ app.use(
 // PUT /api/partes/:id
 app.use('/api/partes', verificarToken, require('./modules/partes/partes.routes.propias'));
 
+// Módulo 1.4 — Biblioteca de escritos
+// verificarToken igual que clientes/expedientes: sin token válido no se llega al router
+app.use('/api/plantillas', verificarToken, require('./modules/plantillas/plantillas.routes'));
+
 module.exports = app;
