@@ -3,6 +3,7 @@
 // Recibe req/res, valida la entrada y delega en el service.
 // ============================================================
 const service = require('./plantillas.service');
+const documentos = require('./plantillas.documentos');
 
 // Valores permitidos (espejo de los enums de schema.prisma).
 // Se validan acá para devolver un 400 claro en vez de un error críptico de Prisma.
@@ -119,4 +120,39 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, actualizar, eliminar };
+// GET /api/plantillas/:id/descargar?formato=docx|pdf
+// Devuelve el archivo generado (el .txt se genera en el frontend, no pasa por acá).
+const descargar = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+
+    const { formato } = req.query;
+    if (!['docx', 'pdf'].includes(formato)) {
+      return res.status(400).json({ error: 'Formato inválido (usar docx o pdf)' });
+    }
+
+    const plantilla = await service.obtenerPlantillaPorId(id);
+    if (!plantilla) return res.status(404).json({ error: 'Plantilla no encontrada' });
+
+    // Cada formato tiene su generador y su tipo MIME (el "tipo de archivo" para el navegador)
+    const esDocx = formato === 'docx';
+    const buffer = esDocx
+      ? await documentos.generarDocx(plantilla)
+      : await documentos.generarPdf(plantilla);
+
+    res.setHeader(
+      'Content-Type',
+      esDocx
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="escrito.${formato}"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error al generar el archivo de la plantilla:', error);
+    res.status(500).json({ error: 'Error al generar el archivo' });
+  }
+};
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, descargar };

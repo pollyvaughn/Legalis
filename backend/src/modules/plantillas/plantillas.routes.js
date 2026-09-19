@@ -9,6 +9,7 @@ const plantillasController = require('./plantillas.controller');
 
 router.get('/', plantillasController.listar);          // GET    /api/plantillas (filtros + búsqueda + paginación)
 router.get('/:id', plantillasController.obtener);      // GET    /api/plantillas/5 (detalle con contenido)
+router.get('/:id/descargar', plantillasController.descargar); // GET /api/plantillas/5/descargar?formato=docx|pdf
 router.post('/', plantillasController.crear);          // POST   /api/plantillas
 router.put('/:id', plantillasController.actualizar);   // PUT    /api/plantillas/5
 router.delete('/:id', plantillasController.eliminar);  // DELETE /api/plantillas/5

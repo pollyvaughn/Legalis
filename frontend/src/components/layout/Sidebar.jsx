@@ -1,7 +1,7 @@
 // ============================================================
 // Sidebar.jsx
 // Barra de navegación lateral fija de la aplicación.
-// Muestra los 7 módulos del sistema (aunque algunos todavía no
+// Muestra los 8 módulos del sistema (aunque algunos todavía no
 // tengan backend/frontend funcional) + bloque de perfil de usuario.
 // Paleta clara (fondo blanco), siguiendo la referencia visual de Figma.
 // ============================================================
@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   Users,
   FileText,
+  FileSignature,
   Clock,
   Calendar,
   DollarSign,
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { label: "Asesorías & Trámites", to: "/asesorias", icon: Clock, disponible: false },
   { label: "Calendario & Plazos", to: "/calendario", icon: Calendar, disponible: false },
   { label: "Honorarios & Gastos", to: "/honorarios", icon: DollarSign, disponible: false },
+  { label: "Escritos Forenses", to: "/plantillas", icon: FileSignature, disponible: true },
   { label: "Cobros & Facturación", to: "/cobros", icon: CreditCard, disponible: false },
 ];
 
