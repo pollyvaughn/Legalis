@@ -6,6 +6,13 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "../modelo_datos.svg"
+  disableEmoji = true
+  theme = "neutral"
+}
+
 datasource db {
   provider = "postgresql"
 }

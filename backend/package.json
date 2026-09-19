@@ -24,9 +24,11 @@
     "pdfkit": "^0.20.2"
   },
   "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.17.0",
     "@types/node": "^26.2.0",
     "nodemon": "^3.1.14",
-    "prisma": "^7.9.1"
+    "prisma": "^7.9.1",
+    "prisma-erd-generator": "^3.2.1"
   },
   "allowScripts": {
     "bcrypt@6.0.0": true,
