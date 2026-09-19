@@ -19,11 +19,20 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
 import { OPCIONES_FUERO, etiquetaFuero } from '../../constants/fueros';
+import { OPCIONES_ESTADO_PROCESAL, etiquetaEstadoProcesal } from '../../constants/estadosProcesales';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.
 const ROLES_PROCESALES = ['ACTOR', 'DEMANDADO', 'TERCERO', 'REPRESENTANTE_ESTATAL', 'DEFENSA'];
 const OPCIONES_ROLES = ROLES_PROCESALES.map((rol) => ({ value: rol, label: rol }));
+// Color del Badge según el estado procesal (mismos tonos que en ExpedientesListPage)
+const TONO_ESTADO_PROCESAL = {
+  EN_TRAMITE: 'blue',
+  EN_APELACION: 'yellow',
+  SUSPENDIDO: 'gray',
+  ARCHIVADO: 'gray',
+  CONCLUIDO: 'green',
+};
 
 // Muestra el valor, o un guión si está vacío/null — evita que
 // la lista de partes se vea inconsistente entre sí (ver backlog).
@@ -96,6 +105,7 @@ function ExpedienteDetailPage() {
   function iniciarEdicion() {
     setForm({
       numeroExpediente: expediente.numeroExpediente,
+      anio: expediente.anio, // NUEVO
       caratula: expediente.caratula,
       fuero: expediente.fuero || '',
       jurisdiccion: expediente.jurisdiccion || '',
@@ -104,6 +114,7 @@ function ExpedienteDetailPage() {
       objetoJuicio: expediente.objetoJuicio || '',
       montoJuicio: expediente.montoJuicio ?? '',
       unidadFiscal: expediente.unidadFiscal || '',
+      estadoProcesal: expediente.estadoProcesal, // NUEVO
     });
     setErrorForm('');
     setEditando(true);
@@ -123,6 +134,8 @@ function ExpedienteDetailPage() {
       await api.put(`/expedientes/${id}`, {
         ...form,
         montoJuicio: form.montoJuicio === '' ? null : form.montoJuicio,
+        // fuero es opcional: si quedó vacío mandamos null (un '' no es un valor válido del enum)
+        fuero: form.fuero === '' ? null : form.fuero,
       });
 
       setEditando(false);
@@ -252,11 +265,16 @@ function ExpedienteDetailPage() {
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
         <div className="mb-5 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">
-              {expediente.numeroExpediente}
+          <h1 className="text-xl font-semibold text-gray-900">
+              {expediente.numeroExpediente}/{expediente.anio}
             </h1>
             <p className="mt-1 text-sm text-gray-500">{expediente.caratula}</p>
-            <div className="mt-2">
+            <div className="mt-2 flex gap-2">
+              {/* Estado procesal (en qué etapa está el juicio) */}
+              <Badge tone={TONO_ESTADO_PROCESAL[expediente.estadoProcesal] || 'gray'}>
+                {etiquetaEstadoProcesal(expediente.estadoProcesal)}
+              </Badge>
+              {/* Activo/Inactivo (si el expediente está dado de baja en el sistema) */}
               <Badge tone={expediente.activo ? 'green' : 'gray'}>
                 {expediente.activo ? 'Activo' : 'Inactivo'}
               </Badge>
@@ -307,6 +325,20 @@ function ExpedienteDetailPage() {
               <dt className="text-xs font-medium uppercase text-gray-400">Unidad fiscal</dt>
               <dd className="mt-1 text-gray-800">{conPlaceholder(expediente.unidadFiscal)}</dd>
             </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Estado procesal</dt>
+              <dd className="mt-1 text-gray-800">
+                {etiquetaEstadoProcesal(expediente.estadoProcesal)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase text-gray-400">Monto del juicio</dt>
+              <dd className="mt-1 text-gray-800">
+                {expediente.montoJuicio
+                  ? Number(expediente.montoJuicio).toLocaleString('es-PY')
+                  : '—'}
+              </dd>
+            </div>
           </dl>
         ) : (
           // ------------------------------------------
@@ -316,13 +348,26 @@ function ExpedienteDetailPage() {
           // dueño requiere un flujo explícito, no un campo suelto).
           // ------------------------------------------
           <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
-            <Input
-              label="N° Expediente"
-              name="numeroExpediente"
-              value={form.numeroExpediente}
-              onChange={handleChange}
-              required
-            />
+                        {/* Número y año van juntos: forman la identificación del expediente */}
+                        <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="N° Expediente"
+                name="numeroExpediente"
+                value={form.numeroExpediente}
+                onChange={handleChange}
+                required
+              />
+              <Input
+                label="Año"
+                type="number"
+                name="anio"
+                value={form.anio}
+                onChange={handleChange}
+                required
+                min="1900"
+                max="2100"
+              />
+            </div>
 
             <Input
               label="Carátula"
@@ -338,7 +383,7 @@ function ExpedienteDetailPage() {
                 name="fuero"
                 value={form.fuero}
                 onChange={handleChange}
-                opciones={OPCIONES_FUERO}
+                opciones={[{ value: '', label: 'Sin especificar' }, ...OPCIONES_FUERO]}
               />
               <Input
                 label="Jurisdicción"
@@ -349,7 +394,14 @@ function ExpedienteDetailPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Juzgado" name="juzgado" value={form.juzgado} onChange={handleChange} />
+              {/* Juzgado obligatorio: es parte de la identificación única */}
+              <Input
+                label="Juzgado"
+                name="juzgado"
+                value={form.juzgado}
+                onChange={handleChange}
+                required
+              />
               <Input
                 label="Secretaría"
                 name="secretaria"
@@ -357,6 +409,14 @@ function ExpedienteDetailPage() {
                 onChange={handleChange}
               />
             </div>
+
+            <SelectInput
+              label="Estado procesal"
+              name="estadoProcesal"
+              value={form.estadoProcesal}
+              onChange={handleChange}
+              opciones={OPCIONES_ESTADO_PROCESAL}
+            />
 
             <Input
               label="Objeto del juicio"
