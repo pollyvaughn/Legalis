@@ -64,4 +64,7 @@ app.use('/api/partes', verificarToken, require('./modules/partes/partes.routes.p
 // verificarToken igual que clientes/expedientes: sin token válido no se llega al router
 app.use('/api/plantillas', verificarToken, require('./modules/plantillas/plantillas.routes'));
 
+// Módulo 1.3 — Catálogo de trámites
+app.use('/api/tipos-tramite', verificarToken, require('./modules/tipos-tramite/tipos-tramite.routes'));
+
 module.exports = app;

@@ -1,0 +1,17 @@
+// ============================================================
+// TIPOS-TRAMITE ROUTES — Módulo 1.3
+// Define las URLs del módulo y qué función del controller se
+// ejecuta para cada una. Base: /api/tipos-tramite
+// ============================================================
+const express = require('express');
+const router = express.Router();
+const controller = require('./tipos-tramite.controller');
+
+router.get('/', controller.listar);            // GET    /api/tipos-tramite (?estado=&busqueda=)
+router.get('/opciones', controller.opciones);  // GET    /api/tipos-tramite/opciones  (ANTES de '/:id')
+router.get('/:id', controller.obtener);        // GET    /api/tipos-tramite/5
+router.post('/', controller.crear);            // POST   /api/tipos-tramite
+router.put('/:id', controller.actualizar);     // PUT    /api/tipos-tramite/5
+router.delete('/:id', controller.eliminar);    // DELETE /api/tipos-tramite/5
+
+module.exports = router;
