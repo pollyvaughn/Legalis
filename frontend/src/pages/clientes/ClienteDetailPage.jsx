@@ -72,6 +72,7 @@ function ClienteDetailPage() {
       // Extensión jurídica
       tipoSocietario: cliente.personaJuridica?.tipoSocietario || '',
       fechaConstitucion: cliente.personaJuridica?.fechaConstitucion?.slice(0, 10) || '',
+      representanteLegal: cliente.personaJuridica?.representanteLegal || '', // NUEVO
     });
     setErrorForm('');
     setEditando(true);
@@ -93,6 +94,7 @@ function ClienteDetailPage() {
         digitoVerificador: form.digitoVerificador === '' ? null : form.digitoVerificador,
         fechaNacimiento: form.fechaNacimiento || null,
         fechaConstitucion: form.fechaConstitucion || null,
+        representanteLegal: form.representanteLegal || null, // NUEVO
       });
 
       setEditando(false);
@@ -216,12 +218,23 @@ function ClienteDetailPage() {
             )}
 
             {cliente.tipo === 'JURIDICA' && (
-              <div>
-                <dt className="text-xs font-medium uppercase text-gray-400">Tipo societario</dt>
-                <dd className="mt-1 text-gray-800">
-                  {cliente.personaJuridica?.tipoSocietario || '—'}
-                </dd>
-              </div>
+              <>
+                <div>
+                  <dt className="text-xs font-medium uppercase text-gray-400">Tipo societario</dt>
+                  <dd className="mt-1 text-gray-800">
+                    {cliente.personaJuridica?.tipoSocietario || '—'}
+                  </dd>
+                </div>
+                {/* NUEVO */}
+                <div>
+                  <dt className="text-xs font-medium uppercase text-gray-400">
+                    Representante legal
+                  </dt>
+                  <dd className="mt-1 text-gray-800">
+                    {cliente.personaJuridica?.representanteLegal || '—'}
+                  </dd>
+                </div>
+              </>
             )}
           </dl>
         ) : (
@@ -319,6 +332,13 @@ function ClienteDetailPage() {
                   value={form.fechaConstitucion}
                   onChange={handleChange}
                 />
+                {/* NUEVO */}
+                <Input
+                  label="Representante legal"
+                  name="representanteLegal"
+                  value={form.representanteLegal}
+                  onChange={handleChange}
+                />
               </div>
             )}
 
@@ -349,7 +369,7 @@ function ClienteDetailPage() {
                   to={`/expedientes/${exp.id}`}
                   className="text-sm font-medium text-gray-900 hover:underline"
                 >
-                  {exp.numeroExpediente}
+                  {exp.numeroExpediente}/{exp.anio}
                 </Link>
                 <p className="mt-0.5 text-xs text-gray-500">{exp.caratula}</p>
               </li>

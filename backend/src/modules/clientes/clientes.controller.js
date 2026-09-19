@@ -35,17 +35,39 @@ async function crear(req, res) {
 
 // ------------------------------------------
 // GET /api/clientes
-// Lista clientes. Por defecto solo los activos.
-// ?incluirInactivos=true trae también los inactivos.
+// Lista clientes con filtros y paginación. Por defecto solo activos.
+// Query params (todos opcionales y combinables):
+//   estado ('activos' | 'inactivos' | 'todos'), busqueda, pagina, limite
+// Responde { datos, total, pagina, limite, totalPaginas }.
 // ------------------------------------------
 async function listar(req, res) {
   try {
-    const incluirInactivos = req.query.incluirInactivos === 'true';
-    const clientes = await clientesService.listarClientes(incluirInactivos);
-    res.json(clientes);
+    const resultado = await clientesService.listarClientes({
+      estado: req.query.estado,
+      busqueda: req.query.busqueda,
+      pagina: req.query.pagina,
+      limite: req.query.limite,
+    });
+    res.json(resultado);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al listar los clientes' });
+  }
+}
+
+// ------------------------------------------
+// GET /api/clientes/opciones
+// Lista liviana de clientes activos ({ id, nombreRazonSocial }),
+// sin paginar, para llenar desplegables (ej: select de cliente
+// en el alta de expedientes).
+// ------------------------------------------
+async function listarOpciones(req, res) {
+  try {
+    const opciones = await clientesService.listarOpcionesClientes();
+    res.json(opciones);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al listar las opciones de clientes' });
   }
 }
 
@@ -99,6 +121,7 @@ async function actualizar(req, res) {
 module.exports = {
   crear,
   listar,
+  listarOpciones,
   obtenerPorId,
   actualizar,
 };

@@ -88,25 +88,81 @@ async function crearCliente(datos) {
 }
 
 // ------------------------------------------
-// LISTAR CLIENTES
-// Por defecto solo trae clientes activos. Pasando
-// incluirInactivos = true se traen todos (mismo patrón que
-// obtenerClientePorId, para que el frontend pueda ofrecer un
-// filtro Activos/Inactivos/Todos).
+// LISTAR CLIENTES (con filtros y paginación)
+// Recibe un objeto de opciones (mismo criterio que
+// expedientes.service.js):
+//   estado   -> 'activos' (default) | 'inactivos' | 'todos'
+//   busqueda -> texto libre: busca en nombre/razón social, RUC,
+//               email y cédula (esta última vive en la extensión
+//               personaFisica, por eso el filtro anidado)
+//   pagina / limite -> paginación (página 1 por defecto, 10 por página)
+//
+// Devuelve { datos, total, pagina, limite, totalPaginas }.
 // ------------------------------------------
-async function listarClientes(incluirInactivos = false) {
+async function listarClientes(opciones = {}) {
+  const { estado = 'activos', busqueda, pagina = 1, limite = 10 } = opciones;
+
   const where = {};
 
-  if (!incluirInactivos) {
+  // Filtro de estado. Con 'todos' no se agrega condición.
+  // Cualquier valor desconocido cae en 'activos' (default seguro).
+  if (estado === 'inactivos') {
+    where.activo = false;
+  } else if (estado !== 'todos') {
     where.activo = true;
   }
 
+  if (busqueda) {
+    // OR: alcanza con que coincida en uno de los campos
+    where.OR = [
+      { nombreRazonSocial: { contains: busqueda, mode: 'insensitive' } },
+      { ruc: { contains: busqueda, mode: 'insensitive' } },
+      { email: { contains: busqueda, mode: 'insensitive' } },
+      // Cédula: campo de la tabla hija (relación 1:1 opcional)
+      { personaFisica: { cedula: { contains: busqueda, mode: 'insensitive' } } },
+    ];
+  }
+
+  // Normaliza paginación: enteros positivos, máximo 100 por página
+  const paginaNum = Math.max(1, Number(pagina) || 1);
+  const limiteNum = Math.min(100, Math.max(1, Number(limite) || 10));
+
+  // Dos consultas en una transacción: la página y el total (respeta filtros)
+  const [datos, total] = await prisma.$transaction([
+    prisma.cliente.findMany({
+      where,
+      include: {
+        personaFisica: true,
+        personaJuridica: true,
+      },
+      orderBy: { nombreRazonSocial: 'asc' },
+      skip: (paginaNum - 1) * limiteNum, // cuántos saltear
+      take: limiteNum,                   // cuántos traer
+    }),
+    prisma.cliente.count({ where }),
+  ]);
+
+  return {
+    datos,
+    total,
+    pagina: paginaNum,
+    limite: limiteNum,
+    totalPaginas: Math.ceil(total / limiteNum),
+  };
+}
+
+// ------------------------------------------
+// LISTAR OPCIONES DE CLIENTES (para selects/desplegables)
+// Devuelve TODOS los clientes ACTIVOS, sin paginar, con solo
+// los campos mínimos (id y nombre). Pensado para el select de
+// "Cliente" al crear un expediente: ahí hace falta ver a todos
+// los clientes posibles, no una página. Solo activos porque un
+// cliente inactivo no puede recibir expedientes nuevos.
+// ------------------------------------------
+async function listarOpcionesClientes() {
   return prisma.cliente.findMany({
-    where,
-    include: {
-      personaFisica: true,
-      personaJuridica: true,
-    },
+    where: { activo: true },
+    select: { id: true, nombreRazonSocial: true }, // solo lo necesario, más liviano
     orderBy: { nombreRazonSocial: 'asc' },
   });
 }
@@ -237,6 +293,7 @@ async function actualizarCliente(id, datos) {
 module.exports = {
   crearCliente,
   listarClientes,
+  listarOpcionesClientes,
   obtenerClientePorId,
   actualizarCliente,
 };

@@ -33,6 +33,7 @@ export default function ClienteFormModal({ onClose, onCreado }) {
     // Extensión jurídica
     tipoSocietario: '',
     fechaConstitucion: '',
+    representanteLegal: '', // NUEVO: quien representa a la empresa (opcional)
   });
 
   function handleChange(evento) {
@@ -51,6 +52,7 @@ export default function ClienteFormModal({ onClose, onCreado }) {
         digitoVerificador: form.digitoVerificador === '' ? undefined : form.digitoVerificador,
         fechaNacimiento: form.fechaNacimiento || undefined,
         fechaConstitucion: form.fechaConstitucion || undefined,
+        representanteLegal: form.representanteLegal || undefined, // NUEVO
       });
 
       // Avisa a ClientesListPage que hay un cliente nuevo (refresca la tabla)
@@ -210,6 +212,15 @@ export default function ClienteFormModal({ onClose, onCreado }) {
                 name="fechaConstitucion"
                 value={form.fechaConstitucion}
                 onChange={handleChange}
+              />
+
+              {/* NUEVO: quien representa a la empresa en general (no es una parte procesal) */}
+              <Input
+                label="Representante legal (opcional)"
+                name="representanteLegal"
+                value={form.representanteLegal}
+                onChange={handleChange}
+                placeholder="Ej: Carlos Benítez"
               />
             </div>
           )}

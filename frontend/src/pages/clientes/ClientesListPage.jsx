@@ -1,14 +1,18 @@
 // ============================================
 // CLIENTESLISTPAGE.JSX
-// Lista de clientes, en tabla estilo Legalis. Por defecto solo
-// muestra activos (mismo comportamiento de siempre); el filtro
-// Activos/Inactivos/Todos permite ver también los inactivados.
+// Lista de clientes con filtros y paginación, ambos resueltos
+// en el BACKEND (GET /api/clientes). El frontend solo manda el
+// estado y la búsqueda elegidos, y muestra la página que devuelve
+// el servidor.
+//
+// Filtros: estado (activos/inactivos/todos) y búsqueda de texto
+// (nombre/razón social, RUC, email y cédula).
+// Paginación: 10 por página, con botones Anterior/Siguiente.
+//
 // La columna Estado (pill) solo se muestra en la vista "Todos",
-// donde sí aporta información (en Activos/Inactivos sería
-// redundante, ya que todas las filas dirían lo mismo).
-// Cada fila lleva al detalle de ese cliente. El botón
-// "+ Nuevo cliente" abre ClienteFormModal como overlay; al
-// guardar, se refresca la lista sin salir de esta página.
+// donde sí aporta información. Cada fila lleva al detalle del
+// cliente. El botón "+ Nuevo cliente" abre ClienteFormModal como
+// overlay; al guardar, se refresca la página actual sin salir.
 // ============================================
 
 import { useEffect, useState } from 'react';
@@ -19,7 +23,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import TablaContainer from '../../components/ui/TablaContainer';
 
-// Genera las iniciales para el avatar circular de cada fila, ej: "Ricardo García" -> "R"
+// Genera la inicial para el avatar circular de cada fila, ej: "Ricardo García" -> "R"
 function inicial(nombre) {
   return nombre?.trim()?.[0]?.toUpperCase() || '?';
 }
@@ -32,24 +36,67 @@ const FILTROS_ESTADO = [
   { value: 'todos', label: 'Todos' },
 ];
 
+// Cantidad de clientes por página
+const LIMITE_POR_PAGINA = 10;
+
 function ClientesListPage() {
+  // --- Datos que devuelve el backend ---
   const [clientes, setClientes] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+
+  // --- Estado de la pantalla ---
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [busqueda, setBusqueda] = useState(''); // filtro de texto local, no pega al backend todavía
-  const [filtroEstado, setFiltroEstado] = useState('activos');
   const [mostrarModal, setMostrarModal] = useState(false);
 
+  // --- Filtros y paginación ---
+  const [pagina, setPagina] = useState(1);
+  const [filtroEstado, setFiltroEstado] = useState('activos');
+
+  // Búsqueda: dos estados. El "input" cambia con cada tecla; el
+  // "debounced" se actualiza 400 ms después de que el usuario deja
+  // de escribir, y ese es el que dispara la petición al backend.
+  const [busquedaInput, setBusquedaInput] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+
   // ------------------------------------------
-  // Trae los clientes del backend. Siempre pide TODOS
-  // (incluirInactivos=true) y el filtrado por estado se hace acá
-  // en memoria, según filtroEstado — evita depender de un query
-  // param nuevo en el backend para algo que hoy es bajo volumen.
+  // DEBOUNCE de la búsqueda.
+  // Cada tecla programa la actualización del valor "real" a 400 ms;
+  // si el usuario tipea de nuevo antes, el return del efecto cancela
+  // el timer anterior. Al aplicarse la búsqueda, vuelve a página 1.
+  // ------------------------------------------
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setBusqueda(busquedaInput);
+      setPagina(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [busquedaInput]);
+
+  // ------------------------------------------
+  // CARGA DE CLIENTES
+  // Trae la página actual con los filtros aplicados. Se declara
+  // como función común (no dentro del useEffect) para poder
+  // reutilizarla al crear un cliente nuevo y refrescar la lista.
   // ------------------------------------------
   async function cargarClientes() {
+    setCargando(true);
+    setError('');
     try {
-      const respuesta = await api.get('/clientes?incluirInactivos=true');
-      setClientes(respuesta.data);
+      // params: axios arma el query string y omite lo undefined
+      const respuesta = await api.get('/clientes', {
+        params: {
+          estado: filtroEstado,
+          busqueda: busqueda || undefined,
+          pagina,
+          limite: LIMITE_POR_PAGINA,
+        },
+      });
+      // El backend devuelve { datos, total, pagina, limite, totalPaginas }
+      setClientes(respuesta.data.datos);
+      setTotal(respuesta.data.total);
+      setTotalPaginas(respuesta.data.totalPaginas);
     } catch (err) {
       setError('No se pudieron cargar los clientes');
     } finally {
@@ -57,31 +104,20 @@ function ClientesListPage() {
     }
   }
 
+  // Recarga cada vez que cambia el estado, la búsqueda (ya con debounce) o la página
   useEffect(() => {
     cargarClientes();
-  }, []);
+  }, [filtroEstado, busqueda, pagina]);
 
-  // Aplica primero el filtro de estado, y sobre ese resultado el
-  // filtro de texto — en ese orden, porque el de texto es más caro
-  // (recorre varios campos) y conviene aplicarlo sobre menos filas.
-  const clientesPorEstado = clientes.filter((c) => {
-    if (filtroEstado === 'activos') return c.activo;
-    if (filtroEstado === 'inactivos') return !c.activo;
-    return true; // 'todos'
-  });
+  // Cambia el filtro de estado y vuelve a la página 1
+  // (si estás en la página 3 y filtrás, esa página puede no existir)
+  function cambiarFiltroEstado(valor) {
+    setFiltroEstado(valor);
+    setPagina(1);
+  }
 
-  const clientesFiltrados = clientesPorEstado.filter((c) => {
-    const texto = busqueda.trim().toLowerCase();
-    if (!texto) return true;
-    return (
-      c.nombreRazonSocial?.toLowerCase().includes(texto) ||
-      c.ruc?.toLowerCase().includes(texto) ||
-      c.email?.toLowerCase().includes(texto)
-    );
-  });
-
-  // La columna Estado solo aporta información cuando se están
-  // mezclando activos e inactivos en la misma vista.
+  // La columna Estado solo aporta información cuando se mezclan
+  // activos e inactivos en la misma vista.
   const mostrarColumnaEstado = filtroEstado === 'todos';
 
   return (
@@ -97,7 +133,7 @@ function ClientesListPage() {
         {FILTROS_ESTADO.map((filtro) => (
           <button
             key={filtro.value}
-            onClick={() => setFiltroEstado(filtro.value)}
+            onClick={() => cambiarFiltroEstado(filtro.value)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
               filtroEstado === filtro.value
                 ? 'bg-gray-900 text-white'
@@ -109,69 +145,95 @@ function ClientesListPage() {
         ))}
       </div>
 
-      {cargando && <p className="text-sm text-gray-500">Cargando clientes...</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      {!cargando && !error && (
-        <TablaContainer
-          busqueda={busqueda}
-          onBusquedaChange={setBusqueda}
-          placeholder="Buscar cliente, email, RUC..."
-          cantidad={clientesFiltrados.length}
-          unidad="cliente"
-        >
-          {clientesFiltrados.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-gray-500">
-              {filtroEstado === 'activos'
-                ? 'Todavía no hay clientes activos cargados.'
-                : 'No hay clientes que coincidan con este filtro.'}
-            </p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-xs font-medium text-gray-500">
-                  <th className="px-5 py-3">Nombre</th>
-                  <th className="px-5 py-3">Tipo</th>
-                  <th className="px-5 py-3">RUC</th>
-                  <th className="px-5 py-3">Email</th>
-                  {mostrarColumnaEstado && <th className="px-5 py-3">Estado</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {clientesFiltrados.map((cliente) => (
-                  <tr
-                    key={cliente.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
-                  >
+      <TablaContainer
+        busqueda={busquedaInput}
+        onBusquedaChange={setBusquedaInput}
+        placeholder="Buscar nombre, RUC, cédula, email..."
+        cantidad={total}
+        unidad="cliente"
+      >
+        {cargando ? (
+          <p className="px-5 py-8 text-center text-sm text-gray-500">Cargando clientes...</p>
+        ) : clientes.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-gray-500">
+            {busqueda || filtroEstado !== 'activos'
+              ? 'No hay clientes que coincidan con este filtro.'
+              : 'Todavía no hay clientes activos cargados.'}
+          </p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-xs font-medium text-gray-500">
+                <th className="px-5 py-3">Nombre</th>
+                <th className="px-5 py-3">Tipo</th>
+                <th className="px-5 py-3">RUC</th>
+                <th className="px-5 py-3">Email</th>
+                {mostrarColumnaEstado && <th className="px-5 py-3">Estado</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {clientes.map((cliente) => (
+                <tr
+                  key={cliente.id}
+                  className="border-t border-gray-100 hover:bg-gray-50"
+                >
+                  <td className="px-5 py-3">
+                    <Link
+                      to={`/clientes/${cliente.id}`}
+                      className="flex items-center gap-3 font-medium text-gray-900"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">
+                        {inicial(cliente.nombreRazonSocial)}
+                      </span>
+                      {cliente.nombreRazonSocial}
+                    </Link>
+                  </td>
+                  <td className="px-5 py-3 text-gray-600">
+                    {cliente.tipo === 'FISICA' ? 'Persona física' : 'Persona jurídica'}
+                  </td>
+                  <td className="px-5 py-3 text-gray-600">{cliente.ruc}</td>
+                  <td className="px-5 py-3 text-gray-600">{cliente.email || '—'}</td>
+                  {mostrarColumnaEstado && (
                     <td className="px-5 py-3">
-                      <Link
-                        to={`/clientes/${cliente.id}`}
-                        className="flex items-center gap-3 font-medium text-gray-900"
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">
-                          {inicial(cliente.nombreRazonSocial)}
-                        </span>
-                        {cliente.nombreRazonSocial}
-                      </Link>
+                      <Badge tone={cliente.activo ? 'green' : 'gray'}>
+                        {cliente.activo ? 'Activo' : 'Inactivo'}
+                      </Badge>
                     </td>
-                    <td className="px-5 py-3 text-gray-600">
-                      {cliente.tipo === 'FISICA' ? 'Persona física' : 'Persona jurídica'}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{cliente.ruc}</td>
-                    <td className="px-5 py-3 text-gray-600">{cliente.email || '—'}</td>
-                    {mostrarColumnaEstado && (
-                      <td className="px-5 py-3">
-                        <Badge tone={cliente.activo ? 'green' : 'gray'}>
-                          {cliente.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </TablaContainer>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TablaContainer>
+
+      {/* --- Paginación: solo se muestra si hay más de una página --- */}
+      {totalPaginas > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Página {pagina} de {totalPaginas}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagina <= 1}
+              onClick={() => setPagina((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={pagina >= totalPaginas}
+              onClick={() => setPagina((p) => p + 1)}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* --- Modal de alta de cliente (overlay) --- */}
@@ -180,7 +242,7 @@ function ClientesListPage() {
           onClose={() => setMostrarModal(false)}
           onCreado={() => {
             setMostrarModal(false);
-            cargarClientes();
+            cargarClientes(); // refresca la página actual con el cliente nuevo
           }}
         />
       )}

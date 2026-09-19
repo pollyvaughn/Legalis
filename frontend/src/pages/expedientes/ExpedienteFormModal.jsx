@@ -51,7 +51,7 @@ export default function ExpedienteFormModal({ onClose }) {
   useEffect(() => {
     async function cargarClientes() {
       try {
-        const respuesta = await api.get('/clientes');
+        const respuesta = await api.get('/clientes/opciones');
         setClientes(respuesta.data);
       } catch (err) {
         setError('No se pudieron cargar los clientes');
