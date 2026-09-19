@@ -56,3 +56,24 @@ export function SelectInput({ label, id, opciones, className = '', ...resto }) {
     </div>
   );
 }
+
+// Textarea: mismo look que Input, para textos largos (ej: cuerpo de un escrito).
+// resize-y permite estirarlo hacia abajo pero no hacia los costados.
+export function Textarea({ label, id, className = '', ...resto }) {
+  const textareaId = id || resto.name;
+
+  return (
+    <div>
+      {label && (
+        <label htmlFor={textareaId} className="mb-1 block text-sm font-medium text-gray-700">
+          {label}
+        </label>
+      )}
+      <textarea
+        id={textareaId}
+        className={[CLASES_CAMPO, 'resize-y', className].filter(Boolean).join(' ')}
+        {...resto}
+      />
+    </div>
+  );
+}

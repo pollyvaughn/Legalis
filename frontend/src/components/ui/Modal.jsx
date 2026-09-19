@@ -22,17 +22,19 @@
 
 import { X } from 'lucide-react';
 
-export default function Modal({ title, onClose, children }) {
+// Anchos disponibles: md (default, el de siempre) y lg (formularios con texto largo)
+const ANCHOS = { md: 'max-w-lg', lg: 'max-w-2xl' };
+
+export default function Modal({ title, onClose, size = 'md', closeOnOverlay = true, children }) {
   return (
-    // --- Fondo oscuro semitransparente, clic afuera cierra el modal ---
+    // --- Fondo oscuro: si closeOnOverlay es false, el clic afuera no cierra ---
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
+      onClick={closeOnOverlay ? onClose : undefined}
     >
-      {/* stopPropagation: evita que un clic DENTRO del modal lo cierre */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl"
+        className={`max-h-[90vh] w-full ${ANCHOS[size]} overflow-y-auto rounded-xl bg-white shadow-xl`}
       >
         {/* --- Header: título + botón de cerrar --- */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">

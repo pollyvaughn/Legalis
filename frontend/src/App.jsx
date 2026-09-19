@@ -17,6 +17,7 @@ import ClienteDetailPage from './pages/clientes/ClienteDetailPage';
 import RutaProtegida from './components/RutaProtegida';
 import AppLayout from './components/layout/AppLayout';
 import ProximamentePage from './pages/comunes/ProximamentePage';
+import PlantillasPage from './pages/plantillas/PlantillasPage';
 
 function App() {
   return (
@@ -99,6 +100,18 @@ function App() {
             <RutaProtegida>
               <AppLayout>
                 <ClienteDetailPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Plantillas --- */}
+        <Route
+          path="/plantillas"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <PlantillasPage />
               </AppLayout>
             </RutaProtegida>
           }
