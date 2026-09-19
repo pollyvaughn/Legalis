@@ -243,3 +243,53 @@ model User {
 
   @@map("users")
 }
+
+// ============================================================
+// MÓDULO 1.4 — BIBLIOTECA DE ESCRITOS FORENSES
+// Plantillas de escritos que se van "catastrando" de a poco.
+// Cuerpo en texto plano (sin variables). Hard-delete (sin campo activo).
+// ============================================================
+
+// Clasificación de primer nivel, como la organiza la abogada
+enum ClaseEscrito {
+  DE_FONDO          // escritos principales: demanda, excepción, contestación
+  DE_MERO_TRAMITE   // impulso, oficios, denuncias, etc.
+}
+
+// Tipo específico de escrito
+enum CategoriaEscrito {
+  DEMANDA
+  CONTESTACION
+  EXCEPCION
+  RECURSO
+  IMPULSO_PROCESAL
+  SOLICITUD_OFICIO
+  DENUNCIA
+  MEDIACION
+  MEDIDA_CAUTELAR
+  OTRO
+}
+
+// De dónde salió el texto (trazabilidad: propia, generada con IA u otro)
+enum OrigenPlantilla {
+  PROPIA
+  IA
+  OTRO
+}
+
+model PlantillaEscrito {
+  id            Int              @id @default(autoincrement())
+  titulo        String           @db.VarChar(200)   // nombre visible en la lista
+  descripcion   String?          @db.VarChar(300)   // resumen corto (opcional)
+  contenido     String           @db.Text           // cuerpo completo del escrito (texto plano, sin límite práctico)
+
+  fuero         Fuero?                              // reutiliza el enum existente; opcional (hay escritos válidos para cualquier fuero)
+  clase         ClaseEscrito                        // obligatoria: de fondo o de mero trámite
+  categoria     CategoriaEscrito                    // obligatoria: tipo específico
+  origen        OrigenPlantilla  @default(PROPIA)   // por defecto se asume propia
+
+  creadoEn      DateTime         @default(now())    // se completa solo al crear
+  actualizadoEn DateTime         @updatedAt         // Prisma lo actualiza solo en cada edición
+
+  @@index([fuero, clase, categoria])                // acelera los filtros combinados de la pantalla
+}
