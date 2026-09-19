@@ -73,5 +73,10 @@ app.use('/api/tipos-tramite', verificarToken, require('./modules/tipos-tramite/t
 app.use('/api/obligaciones', verificarToken, require('./modules/obligaciones/obligaciones.routes'));
 // Trámites (vencimientos)
 app.use('/api/tramites', verificarToken, require('./modules/tramites/tramites.routes'));
+// Documentos recibidos (de trámites y de expedientes)
+const documentosRoutes = require('./modules/documentos/documentos.routes');
+app.use('/api/tramites/:tramiteId/documentos', verificarToken, documentosRoutes.porTramite);
+app.use('/api/expedientes/:expedienteId/documentos', verificarToken, documentosRoutes.porExpediente);
+app.use('/api/documentos', verificarToken, documentosRoutes.propias);
 
 module.exports = app;

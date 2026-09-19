@@ -18,6 +18,7 @@ import RutaProtegida from './components/RutaProtegida';
 import AppLayout from './components/layout/AppLayout';
 import ProximamentePage from './pages/comunes/ProximamentePage';
 import PlantillasPage from './pages/plantillas/PlantillasPage';
+import CatalogoTramitesPage from './pages/asesorias/CatalogoTramitesPage';
 
 function App() {
   return (
@@ -165,6 +166,17 @@ function App() {
         {/* Cualquier ruta desconocida, o la raíz "/", redirige a expedientes
             (que a su vez redirige a login si no hay sesión) */}
         <Route path="*" element={<Navigate to="/expedientes" replace />} />
+
+        <Route
+          path="/asesorias/catalogo"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <CatalogoTramitesPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
