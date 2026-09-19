@@ -57,7 +57,7 @@ async function crear(req, res) {
 // GET /api/expedientes
 // Lista expedientes con filtros y paginación. Por defecto solo activos.
 // Query params soportados (todos opcionales y combinables):
-//   clienteId, incluirInactivos, fuero, estadoProcesal, anio,
+//   clienteId, estado, fuero, estadoProcesal, anio,
 //   juzgado, busqueda, pagina, limite
 // Responde { datos, total, pagina, limite, totalPaginas }.
 // ------------------------------------------
@@ -65,7 +65,7 @@ async function listar(req, res) {
   try {
     const resultado = await expedientesService.listarExpedientes({
       clienteId: req.query.clienteId,
-      incluirInactivos: req.query.incluirInactivos === 'true',
+      estado: req.query.estado, // CAMBIO: 'activos' | 'inactivos' | 'todos'
       fuero: req.query.fuero,
       estadoProcesal: req.query.estadoProcesal,
       anio: req.query.anio,

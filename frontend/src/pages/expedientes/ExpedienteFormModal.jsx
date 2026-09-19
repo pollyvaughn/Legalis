@@ -6,6 +6,10 @@
 // cliente desde acá, es un flujo separado).
 // A diferencia de ClienteFormModal, este SÍ navega al detalle
 // tras crear (decisión: permite cargar partes procesales ahí mismo).
+//
+// IDENTIFICACIÓN ÚNICA: número + año + juzgado + carátula.
+// El año va en un campo aparte (la numeración reinicia cada año),
+// por eso el N° de expediente se carga SIN el año.
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -15,6 +19,7 @@ import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { Input, SelectInput } from '../../components/ui/Input';
 import { OPCIONES_FUERO } from '../../constants/fueros';
+import { OPCIONES_ESTADO_PROCESAL } from '../../constants/estadosProcesales';
 
 export default function ExpedienteFormModal({ onClose }) {
   const navigate = useNavigate();
@@ -24,9 +29,13 @@ export default function ExpedienteFormModal({ onClose }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
+  // Estado del formulario. anio arranca con el año actual (lo más común
+  // al cargar un caso nuevo) y estadoProcesal con EN_TRAMITE (mismo
+  // default que el schema de Prisma).
   const [form, setForm] = useState({
     clienteId: '',
     numeroExpediente: '',
+    anio: new Date().getFullYear(),
     caratula: '',
     fuero: '',
     jurisdiccion: '',
@@ -35,6 +44,7 @@ export default function ExpedienteFormModal({ onClose }) {
     objetoJuicio: '',
     montoJuicio: '',
     unidadFiscal: '',
+    estadoProcesal: 'EN_TRAMITE',
   });
 
   // Trae la lista de clientes para poblar el select, una sola vez al abrir el modal.
@@ -67,6 +77,9 @@ export default function ExpedienteFormModal({ onClose }) {
       const respuesta = await api.post('/expedientes', {
         ...form,
         montoJuicio: form.montoJuicio === '' ? null : form.montoJuicio,
+        // fuero es opcional en el backend: si no se eligió, mandamos null
+        // en vez de '' para que Prisma no rechace un enum vacío.
+        fuero: form.fuero === '' ? null : form.fuero,
       });
 
       // Al crear con éxito, cierra el modal y navega directo al detalle
@@ -113,14 +126,27 @@ export default function ExpedienteFormModal({ onClose }) {
               )}
             </div>
 
-            <Input
-              label="N° Expediente"
-              name="numeroExpediente"
-              value={form.numeroExpediente}
-              onChange={handleChange}
-              required
-              placeholder="Ej: 45.892/2024"
-            />
+            {/* Número y año van juntos: forman la identificación del expediente */}
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="N° Expediente"
+                name="numeroExpediente"
+                value={form.numeroExpediente}
+                onChange={handleChange}
+                required
+                placeholder="Ej: 45892"
+              />
+              <Input
+                label="Año"
+                type="number"
+                name="anio"
+                value={form.anio}
+                onChange={handleChange}
+                required
+                min="1900"
+                max="2100"
+              />
+            </div>
 
             <Input
               label="Carátula"
@@ -148,7 +174,14 @@ export default function ExpedienteFormModal({ onClose }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Juzgado" name="juzgado" value={form.juzgado} onChange={handleChange} />
+              {/* Juzgado ahora es obligatorio (parte de la identificación única) */}
+              <Input
+                label="Juzgado"
+                name="juzgado"
+                value={form.juzgado}
+                onChange={handleChange}
+                required
+              />
               <Input
                 label="Secretaría"
                 name="secretaria"
@@ -156,6 +189,14 @@ export default function ExpedienteFormModal({ onClose }) {
                 onChange={handleChange}
               />
             </div>
+
+            <SelectInput
+              label="Estado procesal"
+              name="estadoProcesal"
+              value={form.estadoProcesal}
+              onChange={handleChange}
+              opciones={OPCIONES_ESTADO_PROCESAL}
+            />
 
             <Input
               label="Objeto del juicio"

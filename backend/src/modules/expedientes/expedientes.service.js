@@ -82,7 +82,7 @@ async function crearExpediente(datos) {
 // Recibe un objeto de opciones para no depender del orden de
 // parámetros posicionales (ya son demasiados):
 //   clienteId        -> vista focal por cliente
-//   incluirInactivos -> false por defecto: solo activos
+//   estado -> 'activos' (default) | 'inactivos' | 'todos'
 //   fuero            -> enum Fuero (match exacto)
 //   estadoProcesal   -> enum EstadoProcesal (match exacto)
 //   anio             -> año del expediente (match exacto)
@@ -97,7 +97,7 @@ async function crearExpediente(datos) {
 async function listarExpedientes(opciones = {}) {
   const {
     clienteId,
-    incluirInactivos = false,
+    estado = 'activos', // 'activos' | 'inactivos' | 'todos'
     fuero,
     estadoProcesal,
     anio,
@@ -110,7 +110,12 @@ async function listarExpedientes(opciones = {}) {
   // Arma el filtro dinámicamente: solo agrega lo que vino
   const where = {};
 
-  if (!incluirInactivos) {
+  // Filtro de estado (activo/inactivo). Con 'todos' no se agrega
+  // condición: trae ambos. Cualquier valor desconocido cae en 'activos'
+  // (el comportamiento seguro por defecto).
+  if (estado === 'inactivos') {
+    where.activo = false;
+  } else if (estado !== 'todos') {
     where.activo = true;
   }
   if (clienteId) {
