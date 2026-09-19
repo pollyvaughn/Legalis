@@ -66,5 +66,7 @@ app.use('/api/plantillas', verificarToken, require('./modules/plantillas/plantil
 
 // Módulo 1.3 — Catálogo de trámites
 app.use('/api/tipos-tramite', verificarToken, require('./modules/tipos-tramite/tipos-tramite.routes'));
+// Módulo 1.3 — Obligaciones periódicas
+app.use('/api/obligaciones', verificarToken, require('./modules/obligaciones/obligaciones.routes'));
 
 module.exports = app;
