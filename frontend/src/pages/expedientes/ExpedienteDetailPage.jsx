@@ -66,6 +66,7 @@ function ExpedienteDetailPage() {
   const [rolParte, setRolParte] = useState(ROLES_PROCESALES[0]);
   const [guardandoParte, setGuardandoParte] = useState(false);
   const [errorParte, setErrorParte] = useState('');
+  const [rolEspecificoParte, setRolEspecificoParte] = useState('');
 
   // Estado del form inline para EDITAR una parte existente.
   // parteEnEdicionId guarda el id de la parte que se está editando
@@ -77,6 +78,13 @@ function ExpedienteDetailPage() {
   const [rolEspecificoEdit, setRolEspecificoEdit] = useState('');
   const [guardandoEdit, setGuardandoEdit] = useState(false);
   const [errorEdit, setErrorEdit] = useState('');
+  
+  // Estado del modal de confirmación para ELIMINAR una parte.
+  // parteAEliminar guarda la parte completa (null = modal cerrado)
+  // para poder mostrar su nombre en el mensaje de confirmación.
+  const [parteAEliminar, setParteAEliminar] = useState(null);
+  const [eliminandoParte, setEliminandoParte] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState('');
 
   // ------------------------------------------
   // Trae el expediente del backend. Pide incluirInactivos=true
@@ -181,12 +189,14 @@ function ExpedienteDetailPage() {
         nombre: nombreParte,
         documento: documentoParte || undefined,
         rol: rolParte,
+        rolEspecifico: rolEspecificoParte || undefined, // NUEVO
       });
 
       // Limpia el form y lo cierra
       setNombreParte('');
       setDocumentoParte('');
       setRolParte(ROLES_PROCESALES[0]);
+      setRolEspecificoParte(''); // NUEVO
       setMostrarFormAgregar(false);
 
       // Refresca el expediente para mostrar la parte nueva
@@ -240,6 +250,27 @@ function ExpedienteDetailPage() {
       setErrorEdit(mensaje);
     } finally {
       setGuardandoEdit(false);
+    }
+  }
+
+  // ------------------------------------------
+  // handleEliminarParte: borra la parte confirmada en el modal.
+  // Es un borrado real (no se puede deshacer), por eso pasa
+  // siempre por confirmación previa.
+  // ------------------------------------------
+  async function handleEliminarParte() {
+    setErrorEliminar('');
+    setEliminandoParte(true);
+
+    try {
+      await api.delete(`/partes/${parteAEliminar.id}`);
+      setParteAEliminar(null);
+      await cargarExpediente(); // refresca la lista sin la parte borrada
+    } catch (err) {
+      const mensaje = err.response?.data?.error || 'No se pudo eliminar la parte';
+      setErrorEliminar(mensaje);
+    } finally {
+      setEliminandoParte(false);
     }
   }
 
@@ -506,9 +537,10 @@ function ExpedienteDetailPage() {
                     />
 
                     <Input
-                      label="Rol específico (ej: Apoderado)"
+                      label="Rol específico (opcional)"
                       value={rolEspecificoEdit}
                       onChange={(e) => setRolEspecificoEdit(e.target.value)}
+                      placeholder="Ej: Imputado, Apoderado"
                       className="bg-white"
                     />
 
@@ -531,9 +563,21 @@ function ExpedienteDetailPage() {
                         {parte.rol} · {conPlaceholder(parte.documento)} · {conPlaceholder(parte.rolEspecifico)}
                       </p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
-                      Editar
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
+                        Editar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setErrorEliminar('');
+                          setParteAEliminar(parte);
+                        }}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
                   </div>
                 )}
               </li>
@@ -562,6 +606,13 @@ function ExpedienteDetailPage() {
               value={rolParte}
               onChange={(e) => setRolParte(e.target.value)}
               opciones={OPCIONES_ROLES}
+            />
+
+            <Input
+              label="Rol específico (opcional)"
+              value={rolEspecificoParte}
+              onChange={(e) => setRolEspecificoParte(e.target.value)}
+              placeholder="Ej: Imputado, Apoderado"
             />
 
             {errorParte && <p className="text-sm text-red-600">{errorParte}</p>}
@@ -619,6 +670,32 @@ function ExpedienteDetailPage() {
                 : expediente.activo
                 ? 'Sí, inactivar'
                 : 'Sí, reactivar'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
+      {/* ↑ hasta acá es el modal de inactivar/reactivar (ya existe) */}
+
+      {/* --- Modal de confirmación para ELIMINAR una parte (borrado real) --- */}
+      {parteAEliminar && (
+        <Modal title="Eliminar parte procesal" onClose={() => setParteAEliminar(null)}>
+          <div className="px-6 py-5">
+            <p className="text-sm text-gray-700">
+              ¿Seguro que querés eliminar a <strong>{parteAEliminar.nombre}</strong> de este
+              expediente? Esta acción no se puede deshacer.
+            </p>
+            {errorEliminar && <p className="mt-3 text-sm text-red-600">{errorEliminar}</p>}
+          </div>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setParteAEliminar(null)}
+              disabled={eliminandoParte}
+            >
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleEliminarParte} disabled={eliminandoParte}>
+              {eliminandoParte ? 'Eliminando...' : 'Sí, eliminar'}
             </Button>
           </Modal.Footer>
         </Modal>

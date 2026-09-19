@@ -61,8 +61,8 @@ async function listarPartesPorExpediente(expedienteId) {
 // ------------------------------------------
 // ACTUALIZAR PARTE PROCESAL
 // No permite editar expedienteId: una parte no "cambia" de
-// expediente, si se cargó mal se borra y se crea de nuevo
-// (ParteProcesal no tiene soft-delete por ahora, ver backlog).
+// expediente, si se cargó mal se elimina (ver eliminarParte)
+// y se crea de nuevo.
 // ------------------------------------------
 async function actualizarParte(id, datos) {
   const { clienteId, nombre, documento, rol, rolEspecifico } = datos;
@@ -84,8 +84,26 @@ async function actualizarParte(id, datos) {
   });
 }
 
+// ------------------------------------------
+// ELIMINAR PARTE PROCESAL (borrado real / hard-delete)
+// Decisión de diseño: a diferencia de Cliente y Expediente,
+// ParteProcesal NO usa soft-delete. Una parte cargada por error
+// es un error de tipeo, no un hecho procesal con historial, y
+// nada depende de ella todavía. Si el id no existe, Prisma lanza
+// P2025 y el controller lo traduce a un 404.
+// A REVISAR en el Módulo 2: si una Actuación llega a referenciar
+// a una parte, habrá que definir onDelete: SetNull o restringir
+// el borrado.
+// ------------------------------------------
+async function eliminarParte(id) {
+  return prisma.parteProcesal.delete({
+    where: { id: Number(id) },
+  });
+}
+
 module.exports = {
   crearParte,
   listarPartesPorExpediente,
   actualizarParte,
+  eliminarParte,
 };

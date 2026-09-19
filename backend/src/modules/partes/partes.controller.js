@@ -70,8 +70,28 @@ async function actualizar(req, res) {
   }
 }
 
+// ------------------------------------------
+// DELETE /api/partes/:id
+// Elimina una parte procesal (borrado real, ver nota en el service).
+// ------------------------------------------
+async function eliminar(req, res) {
+  try {
+    await partesService.eliminarParte(req.params.id);
+    // 204 = No Content: se borró y no hay nada que devolver
+    res.status(204).send();
+  } catch (error) {
+    // P2025 = el registro no existe (ya fue eliminado o el id es inválido)
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Parte procesal no encontrada' });
+    }
+    console.error(error);
+    res.status(500).json({ error: 'Error al eliminar la parte procesal' });
+  }
+}
+
 module.exports = {
   crear,
   listar,
   actualizar,
+  eliminar,
 };

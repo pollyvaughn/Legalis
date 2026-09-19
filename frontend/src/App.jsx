@@ -11,7 +11,6 @@ import LoginPage from './pages/LoginPage';
 import ExpedientesListPage from './pages/expedientes/ExpedientesListPage';
 import ExpedienteDetailPage from './pages/expedientes/ExpedienteDetailPage';
 import ExpedienteEditPage from './pages/expedientes/ExpedienteEditPage';
-import ExpedienteCreatePage from './pages/expedientes/ExpedienteCreatePage';
 import ClientesListPage from './pages/clientes/ClientesListPage';
 import ClienteCreatePage from './pages/clientes/ClienteCreatePage';
 import ClienteDetailPage from './pages/clientes/ClienteDetailPage';
@@ -44,17 +43,6 @@ function App() {
             <RutaProtegida>
               <AppLayout>
                 <ExpedientesListPage />
-              </AppLayout>
-            </RutaProtegida>
-          }
-        />
-
-        <Route
-          path="/expedientes/nuevo"
-          element={
-            <RutaProtegida>
-              <AppLayout>
-                <ExpedienteCreatePage />
               </AppLayout>
             </RutaProtegida>
           }
