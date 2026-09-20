@@ -238,17 +238,22 @@ enum RolUsuario {
 
 // ------------------------------------------
 // USER (Usuario del sistema)
-// No hay auto-registro público: los usuarios se crean vía script
-// de seed, porque este sistema es de uso interno y cerrado
-// (una abogada + su asistente), no una app con altas públicas.
+// No hay auto-registro público: la abogada (ABOGADO) crea las
+// cuentas de sus asistentes desde el módulo "Gestión de usuarios".
+// Hay un único ABOGADO; puede haber varios ASISTENTE.
 // ------------------------------------------
 model User {
   id           Int        @id @default(autoincrement())
   email        String     @unique
-  passwordHash String     // nunca se guarda la contraseña en texto plano, solo su hash (bcrypt)
+  passwordHash String     // solo el hash (bcrypt), nunca la contraseña en texto plano
   nombre       String
   rol          RolUsuario @default(ASISTENTE)
-  activo       Boolean    @default(true) // permite desactivar acceso sin borrar el historial de quién hizo qué
+  activo       Boolean    @default(true) // desactivar acceso sin borrar historial
+
+  // true = la contraseña actual es temporal (recién creada o reseteada
+  // por la abogada) y el usuario DEBE cambiarla antes de usar el sistema.
+  debeCambiarPassword Boolean @default(true)
+
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

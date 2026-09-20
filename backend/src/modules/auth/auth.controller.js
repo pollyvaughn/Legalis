@@ -8,8 +8,6 @@ const authService = require('./auth.service');
 async function login(req, res) {
   const { email, password } = req.body;
 
-  // Validación básica de presencia (la validación de formato de email
-  // se puede agregar después con Zod si querés ser más estricta)
   if (!email || !password) {
     return res.status(400).json({ error: 'Email y contraseña son requeridos' });
   }
@@ -18,9 +16,31 @@ async function login(req, res) {
     const resultado = await authService.login(email, password);
     return res.status(200).json(resultado);
   } catch (error) {
-    // 401 = "no autorizado", el código HTTP correcto para credenciales inválidas
+    // 401 = credenciales inválidas
     return res.status(401).json({ error: error.message });
   }
 }
 
-module.exports = { login };
+// ------------------------------------------
+// cambiarPassword
+// Ruta protegida: req.usuario lo dejó verificarToken.
+// El id sale del TOKEN, nunca del body: así nadie puede cambiar
+// la clave de otro usuario mandando un id ajeno.
+// ------------------------------------------
+async function cambiarPassword(req, res) {
+  const { passwordActual, passwordNueva } = req.body;
+
+  if (!passwordActual || !passwordNueva) {
+    return res.status(400).json({ error: 'Contraseña actual y nueva son requeridas' });
+  }
+
+  try {
+    await authService.cambiarPassword(req.usuario.id, passwordActual, passwordNueva);
+    return res.status(200).json({ mensaje: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    // 400: el usuario mandó algo inválido (clave actual mal, nueva muy corta, etc.)
+    return res.status(400).json({ error: error.message });
+  }
+}
+
+module.exports = { login, cambiarPassword };

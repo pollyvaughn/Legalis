@@ -1,14 +1,21 @@
 // ==========================================
+// AUTH MIDDLEWARE
+// Contiene los tres "filtros" que se aplican a las rutas privadas:
+//   1. verificarToken          → ¿hay un JWT válido?
+//   2. exigirPasswordCambiada  → ¿ya cambió su contraseña temporal?
+//   3. requiereRol             → ¿su rol tiene permiso para esta acción?
+// ==========================================
+
+const jwt = require('jsonwebtoken');
+const prisma = require('../config/database');
+
+// ==========================================
 // MIDDLEWARE DE AUTENTICACIÓN
 // Verifica que la request traiga un JWT válido en el header
 // Authorization. Si es válido, cuelga los datos del usuario
 // en req.usuario para que el resto del pipeline (controllers)
 // sepa quién está haciendo la petición.
-// Se aplica ANTES de cualquier ruta que requiera estar logueado.
 // ==========================================
-
-const jwt = require('jsonwebtoken');
-
 function verificarToken(req, res, next) {
   // El header viene con formato: "Authorization: Bearer <token>"
   const authHeader = req.headers.authorization;
@@ -22,34 +29,68 @@ function verificarToken(req, res, next) {
 
   try {
     // jwt.verify chequea la firma Y que no haya expirado.
-    // Si algo falla, tira una excepción (por eso el try/catch).
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Dejamos los datos del usuario disponibles para los controllers
-    // siguientes en la cadena (ej. para saber quién creó un registro)
+    // Datos del usuario disponibles para los siguientes middlewares/controllers
     req.usuario = payload; // { id, email, rol }
 
-    next(); // deja pasar la request al siguiente middleware/controller
+    next();
   } catch (error) {
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 }
 
 // ==========================================
+// MIDDLEWARE: EXIGIR CONTRASEÑA YA CAMBIADA
+// Bloquea el acceso a la API si el usuario todavía tiene una
+// contraseña temporal (debeCambiarPassword = true).
+// Se usa DESPUÉS de verificarToken.
+// NO se aplica a /api/auth/cambiar-password (es justo la ruta
+// que necesita para salir de ese estado).
+// Consulta la DB en cada request a propósito: si la abogada
+// resetea una clave o desactiva a alguien, el efecto es inmediato
+// aunque el token de esa persona todavía no haya vencido.
+// ==========================================
+async function exigirPasswordCambiada(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.usuario.id },
+      select: { activo: true, debeCambiarPassword: true },
+    });
+
+    // Usuario desactivado o borrado mientras tenía sesión abierta
+    if (!user || !user.activo) {
+      return res.status(401).json({ error: 'Usuario inactivo o inexistente' });
+    }
+
+    if (user.debeCambiarPassword) {
+      // "codigo" propio para que el frontend distinga este 403
+      // de un 403 por falta de permisos de rol.
+      return res.status(403).json({
+        error: 'Debés cambiar tu contraseña antes de continuar',
+        codigo: 'DEBE_CAMBIAR_PASSWORD',
+      });
+    }
+
+    next();
+  } catch (error) {
+    // Log del error real en la terminal del backend (para depurar).
+    // Al cliente solo le devolvemos un mensaje genérico.
+    console.error('Error en exigirPasswordCambiada:', error);
+    return res.status(500).json({ error: 'Error verificando el usuario' });
+  }
+}
+
+// ==========================================
 // MIDDLEWARE DE AUTORIZACIÓN POR ROL
-// Se usa DESPUÉS de verificarToken (necesita req.usuario ya cargado).
+// Se usa DESPUÉS de verificarToken (necesita req.usuario cargado).
 // Recibe la lista de roles permitidos y bloquea si el rol del
 // usuario logueado no está en esa lista.
-//
-// Ejemplo de uso: requiereRol('ABOGADO') en rutas de escritura,
-// para que ASISTENTE pueda loguearse y leer, pero no modificar.
+// Ejemplo: requiereRol('ABOGADO') en rutas de escritura.
 // ==========================================
-
 function requiereRol(...rolesPermitidos) {
   return (req, res, next) => {
     if (!req.usuario) {
-      // Esto no debería pasar si el middleware está bien encadenado,
-      // pero es una guarda de seguridad extra.
       return res.status(401).json({ error: 'No autenticado' });
     }
 
@@ -61,4 +102,4 @@ function requiereRol(...rolesPermitidos) {
   };
 }
 
-module.exports = { verificarToken, requiereRol };
+module.exports = { verificarToken, exigirPasswordCambiada, requiereRol };
