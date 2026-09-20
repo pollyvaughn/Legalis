@@ -5,6 +5,7 @@
 // ============================================
 
 const expedientesService = require('./expedientes.service');
+const { ErrorNegocio } = require('../../utils/errores');
 
 // Mensaje único para duplicados: se reutiliza en crear y actualizar
 // para que la regla de negocio se lea igual en ambos lados.
@@ -36,6 +37,10 @@ async function crear(req, res) {
     const expediente = await expedientesService.crearExpediente(req.body);
     res.status(201).json(expediente);
   } catch (error) {
+    // Regla de negocio incumplida (cliente inexistente o inactivo): trae su propio código HTTP
+    if (error instanceof ErrorNegocio) {
+      return res.status(error.status).json({ error: error.message });
+    }
     // P2002 = violación de la unicidad compuesta (número + año + juzgado + carátula)
     if (error.code === 'P2002') {
       return res.status(409).json({ error: MENSAJE_DUPLICADO });
@@ -45,7 +50,8 @@ async function crear(req, res) {
       return res.status(400).json({ error: 'El cliente indicado no existe' });
     }
     // Prisma lanza este error si fuero o estadoProcesal no es un valor válido del enum
-      console.error('Error de validación de Prisma:', error.message); {
+    if (error.name === 'PrismaClientValidationError') {
+      console.error('Error de validación de Prisma:', error.message);
       return res.status(400).json({ error: 'Algún valor enviado no es válido (revisá fuero y estado procesal)' });
     }
     console.error(error);

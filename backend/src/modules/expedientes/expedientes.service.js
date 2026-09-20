@@ -5,6 +5,7 @@
 // ============================================
 
 const prisma = require('../../config/database');
+const { ErrorNegocio } = require('../../utils/errores');
 
 // ------------------------------------------
 // HELPER: siVino
@@ -34,7 +35,7 @@ function limpiarTexto(valor) {
 
 // ------------------------------------------
 // CREAR EXPEDIENTE
-// Requiere un clienteId válido (FK obligatoria).
+// Requiere un clienteId válido (FK obligatoria) y ACTIVO.
 // anio y juzgado son obligatorios (parte de la identificación única).
 // estadoProcesal es opcional: si no viene, Prisma usa el default (EN_TRAMITE).
 // ------------------------------------------
@@ -53,6 +54,21 @@ async function crearExpediente(datos) {
     unidadFiscal,
     estadoProcesal,
   } = datos;
+
+  // Regla del checklist 1.1: un cliente inactivo no puede recibir expedientes nuevos.
+  // El formulario ya lo evita (su select solo lista clientes activos), pero el backend
+  // también lo bloquea: la API puede llamarse directo, o el cliente puede inactivarse
+  // mientras el formulario está abierto.
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: Number(clienteId) },
+    select: { activo: true },
+  });
+  if (!cliente) {
+    throw new ErrorNegocio('El cliente indicado no existe', 400);
+  }
+  if (!cliente.activo) {
+    throw new ErrorNegocio('El cliente está inactivo: no se le pueden crear expedientes nuevos', 409);
+  }
 
   return prisma.expediente.create({
     data: {
