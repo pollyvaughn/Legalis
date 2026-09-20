@@ -28,7 +28,7 @@ const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutGrid, disponible: false },
   { label: "Clientes", to: "/clientes", icon: Users, disponible: true },
   { label: "Expedientes", to: "/expedientes", icon: FileText, disponible: true },
-  { label: "Asesorías & Trámites", to: "/asesorias", icon: Clock, disponible: false },
+  { label: "Asesorías & Trámites", to: "/asesorias", icon: Clock, disponible: true },
   { label: "Calendario & Plazos", to: "/calendario", icon: Calendar, disponible: false },
   { label: "Honorarios & Gastos", to: "/honorarios", icon: DollarSign, disponible: false },
   { label: "Escritos Forenses", to: "/plantillas", icon: FileSignature, disponible: true },

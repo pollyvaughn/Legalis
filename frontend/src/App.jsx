@@ -19,6 +19,7 @@ import AppLayout from './components/layout/AppLayout';
 import ProximamentePage from './pages/comunes/ProximamentePage';
 import PlantillasPage from './pages/plantillas/PlantillasPage';
 import CatalogoTramitesPage from './pages/asesorias/CatalogoTramitesPage';
+import AsesoriasPage from './pages/asesorias/AsesoriasPage';
 
 function App() {
   return (
@@ -118,17 +119,18 @@ function App() {
           }
         />
 
-        {/* --- Módulos aún sin backend: todos apuntan al mismo placeholder --- */}
         <Route
           path="/asesorias"
           element={
-            <RutaProtegida>
-              <AppLayout>
-                <ProximamentePage />
-              </AppLayout>
-            </RutaProtegida>
+          <RutaProtegida>
+            <AppLayout>
+              <AsesoriasPage />
+            </AppLayout>
+          </RutaProtegida>
           }
         />
+
+        {/* --- Módulos aún sin backend: todos apuntan al mismo placeholder --- */}
 
         <Route
           path="/calendario"

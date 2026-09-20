@@ -12,3 +12,40 @@ export function formatearFecha(iso) {
       year: 'numeric',
     });
   }
+
+  // ============================================================
+// FECHAS SIN HORA (vencimientos, recepciones)
+// El backend las manda a medianoche UTC. Si se formatean en la zona
+// horaria local (Paraguay, UTC-3) se muestran un día antes; por eso
+// todo esto trabaja en UTC.
+// ============================================================
+
+// "2026-10-19T00:00:00.000Z" -> "19 oct 2026"
+export function formatearFechaSola(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-PY', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+// ISO -> "AAAA-MM-DD" (el formato que usa <input type="date">)
+export function aInputFecha(iso) {
+  return iso ? iso.slice(0, 10) : '';
+}
+
+// Hoy (según la fecha LOCAL del navegador) como "AAAA-MM-DD"
+export function hoyInput() {
+  const ahora = new Date();
+  const dos = (n) => String(n).padStart(2, '0');
+  return `${ahora.getFullYear()}-${dos(ahora.getMonth() + 1)}-${dos(ahora.getDate())}`;
+}
+
+// Días que faltan desde hoy hasta la fecha. Negativo = ya pasó. 0 = hoy.
+export function diasHasta(iso) {
+  const hoy = new Date(`${hoyInput()}T00:00:00.000Z`);
+  const fecha = new Date(`${aInputFecha(iso)}T00:00:00.000Z`);
+  return Math.round((fecha - hoy) / 86400000); // 86.400.000 ms = 1 día
+}
