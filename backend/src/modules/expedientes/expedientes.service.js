@@ -213,6 +213,11 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
         },
         orderBy: { createdAt: 'asc' },
       },
+      // Documentos recibidos del cliente para este expediente (Módulo 1.3).
+      // Más reciente primero: mismo orden que usa DocumentosSeccion en el front.
+      documentosRecibidos: {
+        orderBy: [{ fechaRecepcion: 'desc' }, { id: 'desc' }],
+      },
     },
   });
 }
