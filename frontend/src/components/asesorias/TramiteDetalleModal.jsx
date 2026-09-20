@@ -21,6 +21,7 @@ import { Input, Textarea } from '../ui/Input';
 import UrgenciaBadge from './UrgenciaBadge';
 import { OPCIONES_ESTADO_TRAMITE } from '../../constants/tramites';
 import { formatearFechaSola, aInputFecha } from '../../utils/fechas';
+import DocumentosSeccion from './DocumentosSeccion';
 
 // Un dato del encabezado: etiqueta chica arriba, valor abajo
 function Dato({ etiqueta, children }) {
@@ -221,7 +222,17 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
             </div>
           </form>
 
-          {/* TANDA 2B: acá va la sección "Documentos recibidos" */}
+        {/* --- Documentos recibidos (fuera del formulario de arriba: no se anidan <form>) ---
+        Al cambiar la lista se actualiza el trámite (cuenta y regla de eliminar)
+        y se avisa a la pantalla de atrás para que refresque la columna "Docs". */}
+          <DocumentosSeccion
+            urlBase={`/tramites/${tramiteId}/documentos`}
+            documentos={tramite.documentos}
+            onChange={(lista) => {
+              setTramite((t) => ({ ...t, documentos: lista }));
+              onCambio();
+            }}
+          />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

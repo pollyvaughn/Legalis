@@ -1,19 +1,21 @@
 // ============================================
 // ASESORIASPAGE.JSX
-// Pantalla principal de Asesorías & Trámites (Módulo 1.3):
-// lista de vencimientos (trámites) de los clientes.
-//
-// Filtros y paginación se resuelven en el BACKEND (GET /api/tramites):
-//   - estado: por defecto "Abiertos" (pendientes y en proceso),
-//     ordenados por vencimiento: lo vencido queda arriba.
-//   - cliente, trámite y búsqueda de texto.
-// Clic en una fila abre el detalle (cambiar estado, ajustar fecha).
-// "+ Nuevo trámite" carga un trámite ÚNICO; los periódicos los
-// generan las obligaciones (tanda 2B).
+// Pantalla principal de Asesorías & Trámites (Módulo 1.3), con dos
+// pestañas:
+//   - Vencimientos: lista de trámites (únicos y generados). Filtros y
+//     paginación en el BACKEND (GET /api/tramites). Por defecto "Abiertos",
+//     ordenados por fecha: lo vencido queda arriba. Clic en una fila abre
+//     el detalle (estado, fecha, descripción, documentos).
+//   - Obligaciones periódicas: las reglas que generan vencimientos
+//     (ObligacionesTab).
+// Botones del encabezado: catálogo, + Obligación periódica, + Nuevo trámite
+// (único). Los avisos de resultado (cuántos vencimientos se generaron,
+// etc.) se muestran arriba, en un banner que se puede cerrar.
 // ============================================
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import api from '../../api/axios';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -21,6 +23,8 @@ import { SelectInput } from '../../components/ui/Input';
 import TablaContainer from '../../components/ui/TablaContainer';
 import TramiteFormModal from '../../components/asesorias/TramiteFormModal';
 import TramiteDetalleModal from '../../components/asesorias/TramiteDetalleModal';
+import ObligacionFormModal from '../../components/asesorias/ObligacionFormModal';
+import ObligacionesTab from '../../components/asesorias/ObligacionesTab';
 import UrgenciaBadge from '../../components/asesorias/UrgenciaBadge';
 import {
   OPCIONES_ESTADO_TRAMITE,
@@ -28,9 +32,16 @@ import {
   etiquetaEstadoTramite,
 } from '../../constants/tramites';
 import { formatearFechaSola } from '../../utils/fechas';
+import { plural } from '../../utils/textos';
 
 // Cantidad de trámites por página
 const LIMITE_POR_PAGINA = 10;
+
+// Pestañas de la pantalla
+const PESTANAS = [
+  { value: 'vencimientos', label: 'Vencimientos' },
+  { value: 'obligaciones', label: 'Obligaciones periódicas' },
+];
 
 // Chips de estado: "Abiertos" (default) + cada estado + "Todos"
 const CHIPS_ESTADO = [
@@ -42,7 +53,11 @@ const CHIPS_ESTADO = [
 function AsesoriasPage() {
   const navigate = useNavigate();
 
-  // --- Datos de la lista (vienen del backend) ---
+  // --- Pestaña activa y aviso de resultado ({ tipo: 'ok' | 'error', texto } o null) ---
+  const [pestana, setPestana] = useState('vencimientos');
+  const [aviso, setAviso] = useState(null);
+
+  // --- Datos de la lista de vencimientos (vienen del backend) ---
   const [tramites, setTramites] = useState([]);
   const [total, setTotal] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
@@ -63,9 +78,13 @@ function AsesoriasPage() {
   const [busquedaInput, setBusquedaInput] = useState('');
   const [busqueda, setBusqueda] = useState('');
 
-  // --- Modales: alta de trámite único y detalle (id del trámite abierto) ---
+  // --- Modales: alta de trámite único, alta de obligación y detalle (id abierto) ---
   const [modalNuevo, setModalNuevo] = useState(false);
+  const [modalObligacion, setModalObligacion] = useState(false);
   const [detalleId, setDetalleId] = useState(null);
+
+  // Cambiar este número "reinicia" la pestaña de obligaciones (la fuerza a recargar)
+  const [versionObligaciones, setVersionObligaciones] = useState(0);
 
   // ------------------------------------------
   // DEBOUNCE de la búsqueda (vuelve a página 1 al aplicarse)
@@ -102,7 +121,7 @@ function AsesoriasPage() {
   }, []);
 
   // ------------------------------------------
-  // CARGA DE LA LISTA
+  // CARGA DE LA LISTA DE VENCIMIENTOS
   // Función común para reutilizarla al crear/editar y refrescar.
   // ------------------------------------------
   async function cargarTramites() {
@@ -141,6 +160,21 @@ function AsesoriasPage() {
     setPagina(1);
   }
 
+  // ------------------------------------------
+  // Al crear una obligación: aviso con los vencimientos generados y
+  // refresco de ambas pestañas.
+  // ------------------------------------------
+  function manejarObligacionCreada({ generados }) {
+    setModalObligacion(false);
+    let texto = `Obligación creada: se generaron ${plural(generados, 'vencimiento')}.`;
+    if (generados === 0) {
+      texto += ' Los de este año ya pasaron: usá «Generar siguiente año» en la pestaña Obligaciones periódicas.';
+    }
+    setAviso({ tipo: 'ok', texto });
+    setVersionObligaciones((v) => v + 1);
+    cargarTramites();
+  }
+
   const hayFiltros = busqueda || filtroCliente || filtroTipo || filtroEstado !== 'abiertos';
 
   return (
@@ -152,128 +186,182 @@ function AsesoriasPage() {
           <Button variant="secondary" onClick={() => navigate('/asesorias/catalogo')}>
             Catálogo de trámites
           </Button>
-          {/* TANDA 2B: acá va el botón "+ Obligación periódica" */}
+          <Button variant="secondary" onClick={() => setModalObligacion(true)}>
+            + Obligación periódica
+          </Button>
           <Button onClick={() => setModalNuevo(true)}>+ Nuevo trámite</Button>
         </div>
       </div>
 
+      {/* --- Aviso de resultado (verde = ok, rojo = error), se puede cerrar --- */}
+      {aviso && (
+        <div
+          className={`mb-4 flex items-start justify-between gap-3 rounded-lg px-4 py-3 text-sm ${
+            aviso.tipo === 'ok' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}
+        >
+          <p>{aviso.texto}</p>
+          <button onClick={() => setAviso(null)} className="shrink-0 opacity-70 hover:opacity-100">
+            <X size={16} strokeWidth={1.75} />
+          </button>
+        </div>
+      )}
+
+      {/* --- Pestañas --- */}
+      <div className="mb-4 flex gap-6 border-b border-gray-200">
+        {PESTANAS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setPestana(p.value)}
+            className={`-mb-px border-b-2 pb-2 text-sm font-medium transition ${
+              pestana === p.value
+                ? 'border-gray-900 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <TablaContainer
-        busqueda={busquedaInput}
-        onBusquedaChange={setBusquedaInput}
-        placeholder="Buscar cliente, RUC, trámite..."
-        cantidad={total}
-        unidad="trámite"
-      >
-        {/* --- Filtros: chips de estado + selects de cliente y trámite --- */}
-        <div className="space-y-3 border-b border-gray-100 px-5 py-4">
-          <div className="flex flex-wrap gap-2">
-            {CHIPS_ESTADO.map((chip) => (
-              <button
-                key={chip.value}
-                onClick={() => cambiarFiltro(setFiltroEstado, chip.value)}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-                  filtroEstado === chip.value
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="w-56">
-              <SelectInput
-                name="filtroCliente"
-                value={filtroCliente}
-                onChange={(e) => cambiarFiltro(setFiltroCliente, e.target.value)}
-                opciones={[{ value: '', label: 'Todos los clientes' }, ...clientes]}
-              />
-            </div>
-            <div className="w-56">
-              <SelectInput
-                name="filtroTipo"
-                value={filtroTipo}
-                onChange={(e) => cambiarFiltro(setFiltroTipo, e.target.value)}
-                opciones={[{ value: '', label: 'Todos los trámites' }, ...tipos]}
-              />
-            </div>
-          </div>
-        </div>
+      {/* ========== PESTAÑA: OBLIGACIONES PERIÓDICAS ========== */}
+      {pestana === 'obligaciones' && (
+        <ObligacionesTab
+          key={versionObligaciones}
+          clientes={clientes}
+          tipos={tipos}
+          onAviso={setAviso}
+          onCambioVencimientos={cargarTramites}
+        />
+      )}
 
-        {/* --- Tabla de vencimientos --- */}
-        {cargando ? (
-          <p className="px-5 py-8 text-center text-sm text-gray-500">Cargando trámites...</p>
-        ) : tramites.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-gray-500">
-            {hayFiltros
-              ? 'No hay trámites que coincidan con este filtro.'
-              : 'No hay trámites abiertos.'}
-          </p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-xs font-medium text-gray-500">
-                <th className="px-5 py-3">Vencimiento</th>
-                <th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Trámite</th>
-                <th className="px-5 py-3">Estado</th>
-                <th className="px-5 py-3">Docs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tramites.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => setDetalleId(t.id)}
-                  className="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
+      {/* ========== PESTAÑA: VENCIMIENTOS ========== */}
+      {pestana === 'vencimientos' && (
+        <>
+          <TablaContainer
+            busqueda={busquedaInput}
+            onBusquedaChange={setBusquedaInput}
+            placeholder="Buscar cliente, RUC, trámite..."
+            cantidad={total}
+            unidad="trámite"
+          >
+            {/* --- Filtros: chips de estado + selects de cliente y trámite --- */}
+            <div className="space-y-3 border-b border-gray-100 px-5 py-4">
+              <div className="flex flex-wrap gap-2">
+                {CHIPS_ESTADO.map((chip) => (
+                  <button
+                    key={chip.value}
+                    onClick={() => cambiarFiltro(setFiltroEstado, chip.value)}
+                    className={`rounded-full px-3 py-1 text-sm font-medium transition ${
+                      filtroEstado === chip.value
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="w-56">
+                  <SelectInput
+                    name="filtroCliente"
+                    value={filtroCliente}
+                    onChange={(e) => cambiarFiltro(setFiltroCliente, e.target.value)}
+                    opciones={[{ value: '', label: 'Todos los clientes' }, ...clientes]}
+                  />
+                </div>
+                <div className="w-56">
+                  <SelectInput
+                    name="filtroTipo"
+                    value={filtroTipo}
+                    onChange={(e) => cambiarFiltro(setFiltroTipo, e.target.value)}
+                    opciones={[{ value: '', label: 'Todos los trámites' }, ...tipos]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* --- Tabla de vencimientos --- */}
+            {cargando ? (
+              <p className="px-5 py-8 text-center text-sm text-gray-500">Cargando trámites...</p>
+            ) : tramites.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-gray-500">
+                {hayFiltros
+                  ? 'No hay trámites que coincidan con este filtro.'
+                  : 'No hay trámites abiertos.'}
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs font-medium text-gray-500">
+                    <th className="px-5 py-3">Vencimiento</th>
+                    <th className="px-5 py-3">Cliente</th>
+                    <th className="px-5 py-3">Trámite</th>
+                    <th className="px-5 py-3">Estado</th>
+                    <th className="px-5 py-3">Docs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tramites.map((t) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => setDetalleId(t.id)}
+                      className="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="whitespace-nowrap text-gray-900">
+                            {formatearFechaSola(t.fechaVencimiento)}
+                          </span>
+                          <UrgenciaBadge tramite={t} />
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-gray-900">{t.cliente.nombreRazonSocial}</td>
+                      <td className="px-5 py-3">
+                        <p className="text-gray-900">{t.tipoTramite.nombre}</p>
+                        <p className="text-xs text-gray-400">{t.obligacionId ? 'Periódico' : 'Único'}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge tone={TONO_ESTADO_TRAMITE[t.estado]}>{etiquetaEstadoTramite(t.estado)}</Badge>
+                      </td>
+                      <td className="px-5 py-3 text-gray-600">{t._count.documentos || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </TablaContainer>
+
+          {/* --- Paginación: solo si hay más de una página --- */}
+          {totalPaginas > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Página {pagina} de {totalPaginas}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pagina <= 1}
+                  onClick={() => setPagina((p) => p - 1)}
                 >
-                  <td className="px-5 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="whitespace-nowrap text-gray-900">
-                        {formatearFechaSola(t.fechaVencimiento)}
-                      </span>
-                      <UrgenciaBadge tramite={t} />
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-gray-900">{t.cliente.nombreRazonSocial}</td>
-                  <td className="px-5 py-3">
-                    <p className="text-gray-900">{t.tipoTramite.nombre}</p>
-                    <p className="text-xs text-gray-400">{t.obligacionId ? 'Periódico' : 'Único'}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Badge tone={TONO_ESTADO_TRAMITE[t.estado]}>{etiquetaEstadoTramite(t.estado)}</Badge>
-                  </td>
-                  <td className="px-5 py-3 text-gray-600">{t._count.documentos || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </TablaContainer>
-
-      {/* --- Paginación: solo si hay más de una página --- */}
-      {totalPaginas > 1 && (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            Página {pagina} de {totalPaginas}
-          </p>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm" disabled={pagina <= 1} onClick={() => setPagina((p) => p - 1)}>
-              Anterior
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={pagina >= totalPaginas}
-              onClick={() => setPagina((p) => p + 1)}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </div>
+                  Anterior
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pagina >= totalPaginas}
+                  onClick={() => setPagina((p) => p + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* --- Modal de alta de trámite único --- */}
@@ -286,6 +374,16 @@ function AsesoriasPage() {
             setModalNuevo(false);
             cargarTramites(); // refresca con el trámite nuevo
           }}
+        />
+      )}
+
+      {/* --- Modal de alta de obligación periódica --- */}
+      {modalObligacion && (
+        <ObligacionFormModal
+          clientes={clientes}
+          tipos={tipos}
+          onClose={() => setModalObligacion(false)}
+          onGuardado={manejarObligacionCreada}
         />
       )}
 

@@ -12,6 +12,8 @@ const ESTADOS_LISTA = ['activas', 'inactivas', 'todas'];
 // (los ids llegan como texto cuando salen de un <select>)
 const entero = (valor) => (valor === '' || valor === null || valor === undefined ? NaN : Number(valor));
 
+const { siVino } = require('../../utils/entrada');
+
 // Mensaje para los 404 de este módulo
 const NO_ENCONTRADA = 'Obligación no encontrada';
 
@@ -106,4 +108,63 @@ const generarSiguienteAnio = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, inactivar, generarSiguienteAnio };
+// PUT /api/obligaciones/:id   body (parcial): { periodicidad?, mesAnual?, observaciones? }
+const actualizar = async (req, res) => {
+  try {
+    const id = entero(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
+
+    // Se arma un objeto solo con los campos permitidos que llegaron
+    const datos = {};
+    if (siVino(req.body, 'periodicidad')) {
+      if (!PERIODICIDADES.includes(req.body.periodicidad)) {
+        return res.status(400).json({ error: 'La periodicidad debe ser MENSUAL o ANUAL' });
+      }
+      datos.periodicidad = req.body.periodicidad;
+    }
+    if (siVino(req.body, 'mesAnual')) {
+      const mes = entero(req.body.mesAnual);
+      if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+        return res.status(400).json({ error: 'El mes debe ser un número de 1 a 12' });
+      }
+      datos.mesAnual = mes;
+    }
+    if (siVino(req.body, 'observaciones')) {
+      if (req.body.observaciones && req.body.observaciones.length > 300) {
+        return res.status(400).json({ error: 'Las observaciones no pueden superar 300 caracteres' });
+      }
+      datos.observaciones = req.body.observaciones;
+    }
+    if (Object.keys(datos).length === 0) {
+      return res.status(400).json({ error: 'No hay nada para actualizar (periodicidad, mesAnual u observaciones)' });
+    }
+
+    res.json(await service.actualizarObligacion(id, datos)); // { obligacion, eliminados, generados }
+  } catch (error) {
+    responderError(res, error, 'Error al actualizar la obligación', NO_ENCONTRADA);
+  }
+};
+
+// POST /api/obligaciones/:id/quitar-futuros   body: { anio? }
+const quitarFuturos = async (req, res) => {
+  try {
+    const id = entero(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
+
+    // "anio" es opcional: sin él se quitan los futuros de todos los años
+    let anio;
+    const recibido = req.body?.anio;
+    if (recibido !== undefined && recibido !== null && recibido !== '') {
+      anio = entero(recibido);
+      if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) {
+        return res.status(400).json({ error: 'Año inválido' });
+      }
+    }
+
+    res.json(await service.quitarVencimientosFuturos(id, anio)); // { eliminados }
+  } catch (error) {
+    responderError(res, error, 'Error al quitar los vencimientos', NO_ENCONTRADA);
+  }
+};
+
+module.exports = { listar, obtener, crear, actualizar, inactivar, quitarFuturos, generarSiguienteAnio };

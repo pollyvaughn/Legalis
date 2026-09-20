@@ -11,5 +11,7 @@ router.get('/:id', controller.obtener);                                  // GET 
 router.post('/', controller.crear);                                      // POST  /api/obligaciones
 router.patch('/:id/inactivar', controller.inactivar);                    // PATCH /api/obligaciones/5/inactivar
 router.post('/:id/generar-siguiente-anio', controller.generarSiguienteAnio); // POST  /api/obligaciones/5/generar-siguiente-anio
+router.put('/:id', controller.actualizar);                            // PUT  /api/obligaciones/5
+router.post('/:id/quitar-futuros', controller.quitarFuturos);         // POST /api/obligaciones/5/quitar-futuros
 
 module.exports = router;
