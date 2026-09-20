@@ -1,7 +1,7 @@
 // ============================================================
 // ExpedienteFormModal.jsx
 // Modal de alta de expediente (overlay sobre ExpedientesListPage).
-// Misma lógica de ExpedienteCreatePage.jsx: el cliente se elige
+// El cliente se elige
 // de un select con clientes ya existentes (no se puede crear
 // cliente desde acá, es un flujo separado).
 // A diferencia de ClienteFormModal, este SÍ navega al detalle

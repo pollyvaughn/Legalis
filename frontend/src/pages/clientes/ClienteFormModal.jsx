@@ -1,8 +1,7 @@
 // ============================================================
 // ClienteFormModal.jsx
 // Modal de alta de cliente (overlay sobre ClientesListPage).
-// Misma lógica de ClienteCreatePage.jsx, pero como componente
-// controlado: recibe onClose (cerrar sin guardar) y onCreado
+// Componente controlado: recibe onClose (cerrar sin guardar) y onCreado
 // (avisar a la lista que refresque tras un POST exitoso).
 // El selector de tipo decide qué campos de extensión mostrar:
 // cédula si es FISICA, tipo societario si es JURIDICA.
@@ -56,8 +55,7 @@ export default function ClienteFormModal({ onClose, onCreado }) {
       });
 
       // Avisa a ClientesListPage que hay un cliente nuevo (refresca la tabla)
-      // y cierra el modal. A diferencia de ClienteCreatePage, NO navega
-      // al detalle: el usuario se queda en la lista.
+      // y cierra el modal. NO navega al detalle: el usuario se queda en la lista.
       onCreado(respuesta.data);
     } catch (err) {
       const mensaje = err.response?.data?.error || 'No se pudo crear el cliente';

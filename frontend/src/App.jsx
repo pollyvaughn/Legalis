@@ -10,9 +10,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import ExpedientesListPage from './pages/expedientes/ExpedientesListPage';
 import ExpedienteDetailPage from './pages/expedientes/ExpedienteDetailPage';
-import ExpedienteEditPage from './pages/expedientes/ExpedienteEditPage';
 import ClientesListPage from './pages/clientes/ClientesListPage';
-import ClienteCreatePage from './pages/clientes/ClienteCreatePage';
 import ClienteDetailPage from './pages/clientes/ClienteDetailPage';
 import RutaProtegida from './components/RutaProtegida';
 import AppLayout from './components/layout/AppLayout';
@@ -62,17 +60,6 @@ function App() {
           }
         />
 
-        <Route
-          path="/expedientes/:id/editar"
-          element={
-            <RutaProtegida>
-              <AppLayout>
-                <ExpedienteEditPage />
-              </AppLayout>
-            </RutaProtegida>
-          }
-        />
-
         {/* --- Clientes --- */}
         <Route
           path="/clientes"
@@ -80,17 +67,6 @@ function App() {
             <RutaProtegida>
               <AppLayout>
                 <ClientesListPage />
-              </AppLayout>
-            </RutaProtegida>
-          }
-        />
-
-        <Route
-          path="/clientes/nuevo"
-          element={
-            <RutaProtegida>
-              <AppLayout>
-                <ClienteCreatePage />
               </AppLayout>
             </RutaProtegida>
           }
