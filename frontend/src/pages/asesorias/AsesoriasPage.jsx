@@ -7,14 +7,16 @@
 //     ordenados por fecha: lo vencido queda arriba. Clic en una fila abre
 //     el detalle (estado, fecha, descripción, documentos).
 //   - Obligaciones periódicas: las reglas que generan vencimientos
-//     (ObligacionesTab).
+//     (ObligacionesTab), que se administran desde su propio detalle.
 // Botones del encabezado: catálogo, + Obligación periódica, + Nuevo trámite
-// (único). Los avisos de resultado (cuántos vencimientos se generaron,
-// etc.) se muestran arriba, en un banner que se puede cerrar.
+// (único). Los avisos de resultado (cuántos vencimientos se generaron al
+// crear una obligación) se muestran arriba, en un banner que se puede cerrar.
+// El filtro de cliente puede venir de la URL (/asesorias?clienteId=5),
+// por ejemplo desde la ficha de un cliente.
 // ============================================
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom'; // CAMBIO: un solo import, con useSearchParams
 import { X } from 'lucide-react';
 import api from '../../api/axios';
 import Button from '../../components/ui/Button';
@@ -51,7 +53,11 @@ const CHIPS_ESTADO = [
 ];
 
 function AsesoriasPage() {
+  // =====================================================
+  // HOOKS: todos DENTRO del componente, arriba de todo
+  // =====================================================
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); // CAMBIO: parámetros de la URL (/asesorias?clienteId=5)
 
   // --- Pestaña activa y aviso de resultado ({ tipo: 'ok' | 'error', texto } o null) ---
   const [pestana, setPestana] = useState('vencimientos');
@@ -70,7 +76,8 @@ function AsesoriasPage() {
 
   // --- Filtros y paginación ---
   const [filtroEstado, setFiltroEstado] = useState('abiertos');
-  const [filtroCliente, setFiltroCliente] = useState('');
+  // CAMBIO: el filtro de cliente arranca con el valor de la URL (o vacío si no viene)
+  const [filtroCliente, setFiltroCliente] = useState(searchParams.get('clienteId') || '');
   const [filtroTipo, setFiltroTipo] = useState('');
   const [pagina, setPagina] = useState(1);
 
@@ -177,6 +184,9 @@ function AsesoriasPage() {
 
   const hayFiltros = busqueda || filtroCliente || filtroTipo || filtroEstado !== 'abiertos';
 
+  // =====================================================
+  // RENDER (el return va SIEMPRE al final del componente)
+  // =====================================================
   return (
     <div>
       {/* --- Encabezado: título + acciones --- */}
@@ -232,7 +242,6 @@ function AsesoriasPage() {
           key={versionObligaciones}
           clientes={clientes}
           tipos={tipos}
-          onAviso={setAviso}
           onCambioVencimientos={cargarTramites}
         />
       )}

@@ -17,6 +17,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
+import ClienteAsesoriasSeccion from '../../components/asesorias/ClienteAsesoriasSeccion';
 
 function ClienteDetailPage() {
   const { id } = useParams();
@@ -377,6 +378,9 @@ function ClienteDetailPage() {
           </ul>
         )}
       </div>
+
+      {/* --- Asesorías y trámites del cliente (Módulo 1.3) --- */}
+      <ClienteAsesoriasSeccion clienteId={cliente.id} mostrarEnlace={cliente.activo} />
 
       {/* --- Modal de confirmación para inactivar/reactivar --- */}
       {mostrarConfirmacion && (
