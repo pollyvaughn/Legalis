@@ -4,7 +4,6 @@
 // cambiar ESTADO, FECHA y DESCRIPCIÓN, y todo se guarda junto con
 // "Guardar cambios". Además permite eliminar (solo trámites únicos
 // sin documentos).
-// La sección de documentos recibidos se suma en la tanda 2B.
 //
 // Props:
 //   tramiteId  id a mostrar
@@ -22,6 +21,7 @@ import UrgenciaBadge from './UrgenciaBadge';
 import { OPCIONES_ESTADO_TRAMITE } from '../../constants/tramites';
 import { formatearFechaSola, aInputFecha } from '../../utils/fechas';
 import DocumentosSeccion from './DocumentosSeccion';
+import { useAuth } from '../../context/AuthContext';
 
 // Un dato del encabezado: etiqueta chica arriba, valor abajo
 function Dato({ etiqueta, children }) {
@@ -34,6 +34,7 @@ function Dato({ etiqueta, children }) {
 }
 
 export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
+  const { esAbogado } = useAuth();
   const [tramite, setTramite] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -170,7 +171,7 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
                   <button
                     key={op.value}
                     type="button"
-                    disabled={guardando}
+                    disabled={guardando || !esAbogado}
                     onClick={() => setForm((f) => ({ ...f, estado: op.value }))}
                     className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
                       form.estado === op.value
@@ -191,6 +192,7 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
               value={form.fechaVencimiento}
               onChange={handleChange}
               required
+              disabled={!esAbogado}
             />
             {tramite.obligacion && (
               <p className="-mt-2 text-xs text-gray-500">
@@ -205,21 +207,24 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
               onChange={handleChange}
               rows={3}
               maxLength={300}
+              disabled={!esAbogado}
             />
 
             {/* Aviso de estado + botón de guardar */}
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm">
-                {hayCambios ? (
-                  <span className="text-amber-600">Tenés cambios sin guardar</span>
-                ) : guardado ? (
-                  <span className="text-green-600">Cambios guardados ✓</span>
-                ) : null}
-              </p>
-              <Button type="submit" size="sm" disabled={!hayCambios || guardando}>
-                {guardando ? 'Guardando...' : 'Guardar cambios'}
-              </Button>
-            </div>
+            {esAbogado && (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm">
+                  {hayCambios ? (
+                    <span className="text-amber-600">Tenés cambios sin guardar</span>
+                  ) : guardado ? (
+                    <span className="text-green-600">Cambios guardados ✓</span>
+                  ) : null}
+                </p>
+                <Button type="submit" size="sm" disabled={!hayCambios || guardando}>
+                  {guardando ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
+              </div>
+            )}
           </form>
 
         {/* --- Documentos recibidos (fuera del formulario de arriba: no se anidan <form>) ---
@@ -237,7 +242,7 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           {/* --- Eliminar: solo únicos sin documentos --- */}
-          {puedeEliminar && (
+          {esAbogado && puedeEliminar && (
             <div className="border-t border-gray-100 pt-5">
               {confirmandoEliminar ? (
                 <div className="flex items-center justify-between gap-3">
@@ -246,7 +251,7 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
                     <Button variant="secondary" size="sm" onClick={() => setConfirmandoEliminar(false)}>
                       Cancelar
                     </Button>
-                    <Button variant="danger" size="sm" onClick={eliminar} disabled={guardando}>
+                    <Button variant="danger" size="sm" onClick={eliminar} disabled={guardando || !esAbogado}>
                       Sí, eliminar
                     </Button>
                   </div>

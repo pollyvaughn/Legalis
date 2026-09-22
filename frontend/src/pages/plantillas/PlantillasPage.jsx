@@ -33,6 +33,7 @@ import {
   textoFuero,
 } from '../../constants/plantillas';
 import { formatearFecha } from '../../utils/fechas';
+import { useAuth } from '../../context/AuthContext';
 
 // Cantidad de plantillas por página
 const LIMITE_POR_PAGINA = 10;
@@ -48,6 +49,7 @@ const SELECT_FUERO = [
 const SELECT_CLASE = [{ value: '', label: 'Todas las clases' }, ...OPCIONES_CLASE];
 
 function PlantillasPage() {
+  const { esAbogado } = useAuth();
   // =====================================================
   // ESTADOS (todos van DENTRO del componente, arriba de todo)
   // =====================================================
@@ -241,9 +243,11 @@ function PlantillasPage() {
       {/* --- Encabezado: título + acción principal --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Escritos forenses</h1>
-        <Button onClick={() => setModal({ modo: 'crear', inicial: null })}>
-          + Nueva plantilla
-        </Button>
+        {esAbogado && (
+          <Button onClick={() => setModal({ modo: 'crear', inicial: null })}>
+            + Nueva plantilla
+          </Button>
+        )}
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
@@ -377,6 +381,7 @@ function PlantillasPage() {
             <PlantillaDetalle
               plantilla={detalle}
               cargando={cargandoDetalle}
+              soloLectura={!esAbogado}
               onCerrar={() => setSeleccionadaId(null)}
               onEditar={abrirEditar}
               onDuplicar={abrirDuplicar}

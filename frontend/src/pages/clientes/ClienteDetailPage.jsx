@@ -18,8 +18,10 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
 import ClienteAsesoriasSeccion from '../../components/asesorias/ClienteAsesoriasSeccion';
+import { useAuth } from '../../context/AuthContext';
 
 function ClienteDetailPage() {
+  const { esAbogado } = useAuth();
   const { id } = useParams();
 
   // Trae el cliente aunque esté inactivo (incluirInactivos=true),
@@ -163,7 +165,7 @@ function ClienteDetailPage() {
               <span className="text-sm text-gray-500">RUC {cliente.ruc}</span>
             </div>
           </div>
-          {!editando && (
+          {esAbogado && !editando && (
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
                 Editar

@@ -54,7 +54,7 @@ function Dato({ etiqueta, valor }) {
   );
 }
 
-function PlantillaDetalle({ plantilla, cargando, onCerrar, onEditar, onDuplicar, onEliminar }) {
+function PlantillaDetalle({ plantilla, cargando, soloLectura = false, onCerrar, onEditar, onDuplicar, onEliminar }) {
   // true durante 2 segundos después de copiar (para mostrar "¡Copiado!")
   const [copiado, setCopiado] = useState(false);
 
@@ -219,30 +219,31 @@ function PlantillaDetalle({ plantilla, cargando, onCerrar, onEditar, onDuplicar,
           </div>
         </div>
 
-        {/* --- Derecha: gestionar la plantilla --- */}
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={onEditar}>
-            <span className="flex items-center gap-1.5">
-              <Pencil size={15} strokeWidth={1.75} />
-              Editar
-            </span>
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onDuplicar}>
-            <span className="flex items-center gap-1.5">
-              <CopyPlus size={15} strokeWidth={1.75} />
-              Duplicar
-            </span>
-          </Button>
-          {/* Eliminar: solo ícono, rojo suave. La confirmación pasa por el modal. */}
-          <button
-            type="button"
-            onClick={onEliminar}
-            title="Eliminar plantilla"
-            className="rounded-lg p-2 text-red-500 transition hover:bg-red-50 hover:text-red-600"
-          >
-            <Trash2 size={17} strokeWidth={1.75} />
-          </button>
-        </div>
+        {/* --- Derecha: gestionar la plantilla (solo la abogada) --- */}
+        {!soloLectura && (
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={onEditar}>
+              <span className="flex items-center gap-1.5">
+                <Pencil size={15} strokeWidth={1.75} />
+                Editar
+              </span>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onDuplicar}>
+              <span className="flex items-center gap-1.5">
+                <CopyPlus size={15} strokeWidth={1.75} />
+                Duplicar
+              </span>
+            </Button>
+            <button
+              type="button"
+              onClick={onEliminar}
+              title="Eliminar plantilla"
+              className="rounded-lg p-2 text-red-500 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <Trash2 size={17} strokeWidth={1.75} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ========== 4. Cuerpo del escrito ==========

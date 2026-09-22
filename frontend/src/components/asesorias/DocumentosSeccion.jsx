@@ -16,6 +16,7 @@ import api from '../../api/axios';
 import Button from '../ui/Button';
 import { Input } from '../ui/Input';
 import { formatearFechaSola, aInputFecha, hoyInput } from '../../utils/fechas';
+import { useAuth } from '../../context/AuthContext';
 
 // Sugerencias del campo "tipo" (se puede escribir cualquier otro texto)
 const SUGERENCIAS = [
@@ -39,6 +40,7 @@ function ordenar(lista) {
 }
 
 export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
+  const { esAbogado } = useAuth();
   // Formulario: null = cerrado | { id: null (alta) o número (edición), ...campos }
   const [form, setForm] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -119,7 +121,7 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
           <h4 className="text-sm font-medium text-gray-700">Documentos recibidos</h4>
           <p className="text-xs text-gray-400">Solo se registra la recepción; no se suben archivos.</p>
         </div>
-        {!form && (
+        {esAbogado && !form && (
           <Button variant="secondary" size="sm" onClick={abrirNuevo}>
             + Registrar recepción
           </Button>
@@ -189,26 +191,27 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
                 {doc.observaciones && <p className="mt-0.5 text-xs text-gray-500">{doc.observaciones}</p>}
               </div>
 
-              {borrarId === doc.id ? (
-                <div className="flex shrink-0 items-center gap-2 text-sm">
-                  <span className="text-gray-600">¿Eliminar?</span>
-                  <button onClick={() => eliminar(doc.id)} className="font-medium text-red-600 hover:underline">
-                    Sí
-                  </button>
-                  <button onClick={() => setBorrarId(null)} className="text-gray-500 hover:underline">
-                    No
-                  </button>
-                </div>
-              ) : (
-                <div className="flex shrink-0 gap-3 text-sm">
-                  <button onClick={() => abrirEditar(doc)} className="text-gray-600 hover:underline">
-                    Editar
-                  </button>
-                  <button onClick={() => setBorrarId(doc.id)} className="text-red-600 hover:underline">
-                    Eliminar
-                  </button>
-                </div>
-              )}
+              {esAbogado &&
+                (borrarId === doc.id ? (
+                  <div className="flex shrink-0 items-center gap-2 text-sm">
+                    <span className="text-gray-600">¿Eliminar?</span>
+                    <button onClick={() => eliminar(doc.id)} className="font-medium text-red-600 hover:underline">
+                      Sí
+                    </button>
+                    <button onClick={() => setBorrarId(null)} className="text-gray-500 hover:underline">
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex shrink-0 gap-3 text-sm">
+                    <button onClick={() => abrirEditar(doc)} className="text-gray-600 hover:underline">
+                      Editar
+                    </button>
+                    <button onClick={() => setBorrarId(doc.id)} className="text-red-600 hover:underline">
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
             </li>
           ))}
         </ul>

@@ -22,6 +22,7 @@ import ClienteFormModal from './ClienteFormModal';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import TablaContainer from '../../components/ui/TablaContainer';
+import { useAuth } from '../../context/AuthContext';
 
 // Genera la inicial para el avatar circular de cada fila, ej: "Ricardo García" -> "R"
 function inicial(nombre) {
@@ -40,6 +41,8 @@ const FILTROS_ESTADO = [
 const LIMITE_POR_PAGINA = 10;
 
 function ClientesListPage() {
+  const { esAbogado } = useAuth();
+
   // --- Datos que devuelve el backend ---
   const [clientes, setClientes] = useState([]);
   const [total, setTotal] = useState(0);
@@ -125,7 +128,7 @@ function ClientesListPage() {
       {/* --- Encabezado de la página: título + acción principal --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Clientes</h1>
-        <Button onClick={() => setMostrarModal(true)}>+ Nuevo cliente</Button>
+        {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo cliente</Button>}
       </div>
 
       {/* --- Filtro de estado: Activos / Inactivos / Todos --- */}

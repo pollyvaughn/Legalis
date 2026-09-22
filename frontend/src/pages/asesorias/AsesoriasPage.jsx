@@ -35,6 +35,7 @@ import {
 } from '../../constants/tramites';
 import { formatearFechaSola } from '../../utils/fechas';
 import { plural } from '../../utils/textos';
+import { useAuth } from '../../context/AuthContext';
 
 // Cantidad de trámites por página
 const LIMITE_POR_PAGINA = 10;
@@ -58,6 +59,8 @@ function AsesoriasPage() {
   // =====================================================
   const navigate = useNavigate();
   const [searchParams] = useSearchParams(); // CAMBIO: parámetros de la URL (/asesorias?clienteId=5)
+
+  const { esAbogado } = useAuth(); // el asistente solo consulta: no ve botones de alta
 
   // --- Pestaña activa y aviso de resultado ({ tipo: 'ok' | 'error', texto } o null) ---
   const [pestana, setPestana] = useState('vencimientos');
@@ -193,13 +196,18 @@ function AsesoriasPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Asesorías &amp; Trámites</h1>
         <div className="flex gap-2">
+          {/* El catálogo lo puede VER cualquiera (solo lectura); el alta es solo de la abogada */}
           <Button variant="secondary" onClick={() => navigate('/asesorias/catalogo')}>
             Catálogo de trámites
           </Button>
-          <Button variant="secondary" onClick={() => setModalObligacion(true)}>
-            + Obligación periódica
-          </Button>
-          <Button onClick={() => setModalNuevo(true)}>+ Nuevo trámite</Button>
+          {esAbogado && (
+            <>
+              <Button variant="secondary" onClick={() => setModalObligacion(true)}>
+                + Obligación periódica
+              </Button>
+              <Button onClick={() => setModalNuevo(true)}>+ Nuevo trámite</Button>
+            </>
+          )}
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import Badge from '../ui/Badge';
 import { SelectInput } from '../ui/Input';
 import ObligacionDetalleModal from './ObligacionDetalleModal';
 import { etiquetaPeriodicidad } from '../../constants/tramites';
+import { useAuth } from '../../context/AuthContext';
 
 // Filtro de estado (el default es "activas")
 const FILTROS_ESTADO = [
@@ -26,6 +27,7 @@ const FILTROS_ESTADO = [
 ];
 
 export default function ObligacionesTab({ clientes, tipos, onCambioVencimientos }) {
+  const { esAbogado } = useAuth();
   const [obligaciones, setObligaciones] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -150,7 +152,9 @@ export default function ObligacionesTab({ clientes, tipos, onCambioVencimientos 
                   <Badge tone={o.activa ? 'green' : 'gray'}>{o.activa ? 'Activa' : 'Inactiva'}</Badge>
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <span className="rounded-lg px-2.5 py-1 text-sm text-gray-600">Administrar</span>
+                  <span className="rounded-lg px-2.5 py-1 text-sm text-gray-600">
+                    {esAbogado ? 'Administrar' : 'Ver'}
+                  </span>
                 </td>
               </tr>
             ))}

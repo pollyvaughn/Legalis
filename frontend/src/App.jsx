@@ -18,6 +18,9 @@ import ProximamentePage from './pages/comunes/ProximamentePage';
 import PlantillasPage from './pages/plantillas/PlantillasPage';
 import CatalogoTramitesPage from './pages/asesorias/CatalogoTramitesPage';
 import AsesoriasPage from './pages/asesorias/AsesoriasPage';
+import CambiarPasswordPage from './pages/CambiarPasswordPage';
+import PerfilPage from './pages/PerfilPage';
+import UsuariosPage from './pages/usuarios/UsuariosPage';
 
 function App() {
   return (
@@ -141,10 +144,6 @@ function App() {
           }
         />
 
-        {/* Cualquier ruta desconocida, o la raíz "/", redirige a expedientes
-            (que a su vez redirige a login si no hay sesión) */}
-        <Route path="*" element={<Navigate to="/expedientes" replace />} />
-
         <Route
           path="/asesorias/catalogo"
           element={
@@ -155,6 +154,47 @@ function App() {
             </RutaProtegida>
           }
         />
+
+                {/* --- Cambio de contraseña obligatorio ---
+            Sin AppLayout (sin sidebar) a propósito, y con permitirConPasswordTemporal
+            para que RutaProtegida no lo redirija a sí mismo en un bucle. */}
+        <Route
+          path="/cambiar-password"
+          element={
+            <RutaProtegida permitirConPasswordTemporal>
+              <CambiarPasswordPage />
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Mi perfil (ABOGADO y ASISTENTE) --- */}
+        <Route
+          path="/perfil"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <PerfilPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Gestión de usuarios (solo ABOGADO) --- */}
+        <Route
+          path="/usuarios"
+          element={
+            <RutaProtegida soloAbogado>
+              <AppLayout>
+                <UsuariosPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+        
+        {/* Cualquier ruta desconocida, o la raíz "/", redirige a expedientes
+            (que a su vez redirige a login si no hay sesión) */}
+        <Route path="*" element={<Navigate to="/expedientes" replace />} />
+
       </Routes>
     </BrowserRouter>
   );

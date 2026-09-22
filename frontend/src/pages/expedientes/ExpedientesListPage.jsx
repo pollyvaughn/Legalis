@@ -26,6 +26,7 @@ import {
   etiquetaEstadoProcesal,
   OPCIONES_ESTADO_PROCESAL,
 } from '../../constants/estadosProcesales';
+import { useAuth } from '../../context/AuthContext';
 
 // Opciones del filtro de estado activo/inactivo. "activos" es el
 // default porque mantiene el comportamiento histórico del sistema.
@@ -48,6 +49,7 @@ const TONO_ESTADO_PROCESAL = {
 const LIMITE_POR_PAGINA = 10;
 
 function ExpedientesListPage() {
+  const { esAbogado } = useAuth();
   // --- Datos que devuelve el backend ---
   const [expedientes, setExpedientes] = useState([]);
   const [total, setTotal] = useState(0);
@@ -150,7 +152,7 @@ function ExpedientesListPage() {
       {/* --- Encabezado de la página: título + acción principal --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Expedientes</h1>
-        <Button onClick={() => setMostrarModal(true)}>+ Nuevo expediente</Button>
+        {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo expediente</Button>}
       </div>
 
       {/* --- Filtro de estado: Activos / Inactivos / Todos --- */}

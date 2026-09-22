@@ -20,6 +20,8 @@ import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
 import { OPCIONES_FUERO, etiquetaFuero } from '../../constants/fueros';
 import { OPCIONES_ESTADO_PROCESAL, etiquetaEstadoProcesal } from '../../constants/estadosProcesales';
+import { useAuth } from '../../context/AuthContext';
+import DocumentosSeccion from '../../components/asesorias/DocumentosSeccion';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.
@@ -41,6 +43,7 @@ function conPlaceholder(valor) {
 }
 
 function ExpedienteDetailPage() {
+  const { esAbogado } = useAuth();
   // useParams lee el :id de la URL (ej: /expedientes/2 → id = "2")
   const { id } = useParams();
 
@@ -311,7 +314,7 @@ function ExpedienteDetailPage() {
               </Badge>
             </div>
           </div>
-          {!editando && (
+          {esAbogado && !editando && (
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
                 Editar
@@ -492,7 +495,7 @@ function ExpedienteDetailPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">Partes procesales</h2>
-          {!mostrarFormAgregar && (
+          {esAbogado && !mostrarFormAgregar && (
             <Button size="sm" onClick={() => setMostrarFormAgregar(true)}>
               + Agregar parte
             </Button>
@@ -563,21 +566,23 @@ function ExpedienteDetailPage() {
                         {parte.rol} · {conPlaceholder(parte.documento)} · {conPlaceholder(parte.rolEspecifico)}
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
-                        Editar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setErrorEliminar('');
-                          setParteAEliminar(parte);
-                        }}
-                      >
-                        Eliminar
-                      </Button>
-                    </div>
+                    {esAbogado && (
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
+                          Editar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setErrorEliminar('');
+                            setParteAEliminar(parte);
+                          }}
+                        >
+                          Eliminar
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </li>
@@ -629,6 +634,15 @@ function ExpedienteDetailPage() {
         )}
       </div>
 
+      {/* --- Documentos recibidos del cliente para este expediente --- */}
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+        <DocumentosSeccion
+          urlBase={`/expedientes/${id}/documentos`}
+          documentos={expediente.documentosRecibidos}
+          onChange={(lista) => setExpediente((e) => ({ ...e, documentosRecibidos: lista }))}
+        />
+      </div>
+      
       {/* --- Modal de confirmación para inactivar/reactivar --- */}
       {mostrarConfirmacion && (
         <Modal

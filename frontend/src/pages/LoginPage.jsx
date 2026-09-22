@@ -19,10 +19,11 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // ------------------------------------------
+   // ------------------------------------------
   // handleSubmit: se ejecuta al enviar el formulario.
-  // preventDefault() evita que el navegador recargue la página
-  // (comportamiento por defecto de cualquier <form>).
+  // preventDefault() evita que el navegador recargue la página.
+  // Tras el login, si la contraseña es temporal, lo manda directo
+  // a cambiarla; si no, a la lista de expedientes.
   // ------------------------------------------
   async function handleSubmit(evento) {
     evento.preventDefault();
@@ -30,12 +31,14 @@ function LoginPage() {
     setCargando(true);
 
     try {
-      await login(email, password);
-      // Login exitoso: redirige a la lista de expedientes
-      navigate('/expedientes');
+      const usuarioLogueado = await login(email, password);
+
+      if (usuarioLogueado.debeCambiarPassword) {
+        navigate('/cambiar-password');
+      } else {
+        navigate('/expedientes');
+      }
     } catch (err) {
-      // El backend devuelve { error: "mensaje" } con status 401
-      // si el email o la contraseña son incorrectos.
       const mensaje = err.response?.data?.error || 'No se pudo iniciar sesión';
       setError(mensaje);
     } finally {

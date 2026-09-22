@@ -22,6 +22,7 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import TablaContainer from '../../components/ui/TablaContainer';
 import TipoTramiteFormModal from '../../components/asesorias/TipoTramiteFormModal';
+import { useAuth } from '../../context/AuthContext';
 
 // Opciones del filtro de estado ("activos" es el default)
 const FILTROS_ESTADO = [
@@ -35,6 +36,7 @@ const CLASE_ACCION = 'rounded-lg px-2.5 py-1 text-sm text-gray-600 transition ho
 const CLASE_ACCION_PELIGRO = 'rounded-lg px-2.5 py-1 text-sm text-red-600 transition hover:bg-red-50';
 
 function CatalogoTramitesPage() {
+  const { esAbogado } = useAuth();
   // --- Datos de la lista ---
   const [tipos, setTipos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -149,7 +151,7 @@ function CatalogoTramitesPage() {
               Los trámites que ofrecés a tus clientes. Se cargan una sola vez y después se asignan a cada cliente.
             </p>
           </div>
-          <Button onClick={() => setModal({ inicial: null })}>+ Nuevo trámite</Button>
+          {esAbogado && <Button onClick={() => setModal({ inicial: null })}>+ Nuevo trámite</Button>}
         </div>
       </div>
 
@@ -185,7 +187,9 @@ function CatalogoTramitesPage() {
           <p className="px-5 py-8 text-center text-sm text-gray-500">
             {busqueda || filtroEstado !== 'activos'
               ? 'No hay trámites que coincidan con este filtro.'
-              : 'Todavía no hay trámites en el catálogo. Cargá el primero con «+ Nuevo trámite».'}
+              : esAbogado
+                ? 'Todavía no hay trámites en el catálogo. Cargá el primero con «+ Nuevo trámite».'
+                : 'Todavía no hay trámites en el catálogo.'}
           </p>
         ) : (
           <table className="w-full text-left text-sm">
@@ -195,7 +199,7 @@ function CatalogoTramitesPage() {
                 <th className="px-5 py-3">Obligaciones</th>
                 <th className="px-5 py-3">Vencimientos</th>
                 {mostrarColumnaEstado && <th className="px-5 py-3">Estado</th>}
-                <th className="px-5 py-3 text-right">Acciones</th>
+                {esAbogado && <th className="px-5 py-3 text-right">Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -219,27 +223,29 @@ function CatalogoTramitesPage() {
                         </Badge>
                       </td>
                     )}
-                    <td className="px-5 py-3">
-                      <div className="flex justify-end gap-1">
-                        <button onClick={() => setModal({ inicial: t })} className={CLASE_ACCION}>
-                          Editar
-                        </button>
-                        {t.activo ? (
-                          <button onClick={() => abrirAccion('inactivar', t)} className={CLASE_ACCION}>
-                            Inactivar
+                    {esAbogado && (
+                      <td className="px-5 py-3">
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => setModal({ inicial: t })} className={CLASE_ACCION}>
+                            Editar
                           </button>
-                        ) : (
-                          <button onClick={() => reactivar(t)} className={CLASE_ACCION}>
-                            Reactivar
-                          </button>
-                        )}
-                        {sinUso && (
-                          <button onClick={() => abrirAccion('eliminar', t)} className={CLASE_ACCION_PELIGRO}>
-                            Eliminar
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                          {t.activo ? (
+                            <button onClick={() => abrirAccion('inactivar', t)} className={CLASE_ACCION}>
+                              Inactivar
+                            </button>
+                          ) : (
+                            <button onClick={() => reactivar(t)} className={CLASE_ACCION}>
+                              Reactivar
+                            </button>
+                          )}
+                          {sinUso && (
+                            <button onClick={() => abrirAccion('eliminar', t)} className={CLASE_ACCION_PELIGRO}>
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

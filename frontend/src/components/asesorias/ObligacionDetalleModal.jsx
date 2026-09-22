@@ -27,13 +27,16 @@ import {
   MESES,
   TONO_ESTADO_TRAMITE,
   etiquetaEstadoTramite,
+  etiquetaPeriodicidad,
 } from '../../constants/tramites';
 import { formatearFechaSola } from '../../utils/fechas';
+import { useAuth } from '../../context/AuthContext';
 
 // Texto del botón de confirmar de cada acción
 const TEXTO_CONFIRMAR = { generar: 'Generar', quitar: 'Quitar', baja: 'Dar de baja' };
 
 export default function ObligacionDetalleModal({ obligacionId, onClose, onCambio }) {
+  const { esAbogado } = useAuth();
   const [obligacion, setObligacion] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -195,7 +198,7 @@ export default function ObligacionDetalleModal({ obligacionId, onClose, onCambio
           {mensaje && <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{mensaje}</p>}
 
           {/* --- Edición (solo si está activa) --- */}
-          {obligacion.activa ? (
+          {obligacion.activa && esAbogado ? (
             <form onSubmit={guardar} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <SelectInput
@@ -242,8 +245,9 @@ export default function ObligacionDetalleModal({ obligacionId, onClose, onCambio
             </form>
           ) : (
             <p className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              Esta obligación está dada de baja: no genera vencimientos y no se puede editar. Si el cliente
-              retoma el servicio, creá una obligación nueva.
+              {obligacion.activa
+                ? `${etiquetaPeriodicidad(obligacion)}${obligacion.observaciones ? ` · ${obligacion.observaciones}` : ''}`
+                : 'Esta obligación está dada de baja: no genera vencimientos y no se puede editar. Si el cliente retoma el servicio, creá una obligación nueva.'}
             </p>
           )}
 
@@ -274,7 +278,7 @@ export default function ObligacionDetalleModal({ obligacionId, onClose, onCambio
           </div>
 
           {/* --- Acciones (solo si está activa) --- */}
-          {obligacion.activa && (
+          {obligacion.activa && esAbogado && (
             <div className="space-y-4 border-t border-gray-100 pt-5">
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" size="sm" disabled={procesando} onClick={() => abrirAccion('generar')}>
