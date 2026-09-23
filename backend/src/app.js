@@ -90,4 +90,39 @@ app.use('/api/tramites/:tramiteId/documentos', protegido, documentosRoutes.porTr
 app.use('/api/expedientes/:expedienteId/documentos', protegido, documentosRoutes.porExpediente);
 app.use('/api/documentos', protegido, documentosRoutes.propias);
 
+// ------------------------------------------
+// MÓDULO 2 — Actuaciones procesales
+// Actuaciones ANIDADAS bajo expediente (crear/listar):
+//   POST /api/expedientes/:expedienteId/actuaciones
+//   GET  /api/expedientes/:expedienteId/actuaciones
+// mergeParams: true (definido en actuacion.routes.js) permite que
+// ese router lea :expedienteId aunque lo haya declarado este
+// app.use(), no él mismo (mismo patrón que partes/documentos).
+//
+// Actuaciones PROPIAS, por id, sin depender de conocer el
+// expedienteId (ver/editar/eliminar):
+//   GET/PUT/DELETE /api/actuaciones/:id
+// ------------------------------------------
+app.use(
+  '/api/expedientes/:expedienteId/actuaciones',
+  protegido,
+  require('./modules/actuaciones/actuacion.routes')
+);
+app.use(
+  '/api/actuaciones',
+  protegido,
+  require('./modules/actuaciones/actuacion.routes.propias')
+);
+
+app.use(
+  '/api/expedientes/:expedienteId/plazos',
+  protegido,
+  require('./modules/plazos/plazo.routes')
+);
+app.use(
+  '/api/plazos',
+  protegido,
+  require('./modules/plazos/plazo.routes.propias')
+);
+
 module.exports = app;

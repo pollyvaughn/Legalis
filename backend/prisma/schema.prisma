@@ -190,7 +190,8 @@ model Expediente {
   @@unique([numeroExpediente, anio, juzgado, caratula])
 
   documentosRecibidos DocumentoRecibido[]   // Módulo 1.3
-
+  actuaciones     Actuacion[] // (Módulo 2): historial de actuaciones registradas sobre este expediente
+  plazosJudiciales PlazoJudicial[]
   @@map("expedientes")
 }
 
@@ -219,6 +220,8 @@ model ParteProcesal {
   rolEspecifico   String?     // etiqueta exacta según fuero (ej. "Imputado", "Víctima", "Actor")
 
   createdAt       DateTime    @default(now())
+
+  actuaciones     Actuacion[] // (Módulo 2): actuaciones donde esta parte figura como quien presentó/notificó
 
   @@map("partes_procesales")
 }
@@ -427,4 +430,210 @@ model DocumentoRecibido {
 
   @@index([tramiteId])
   @@index([expedienteId])
+}
+
+// ============================================================
+// MÓDULO 2 — Actuaciones y plazos procesales
+// ============================================================
+
+// Enum: clasifica el tipo de acto procesal registrado.
+// OTRO actúa como válvula de escape para casos no previstos
+// (agregar un valor nuevo acá es una migración simple, a
+// diferencia de un catálogo de tabla).
+enum TipoActuacion {
+  PROVIDENCIA
+  RESOLUCION
+  SENTENCIA
+  ESCRITO_PRESENTADO
+  AUDIENCIA
+  NOTIFICACION
+  OFICIO
+  OTRO
+}
+
+// Modelo: registro cronológico de todo lo que ocurre en un expediente
+// (providencias, resoluciones, escritos, audiencias, etc.).
+// Es la base de RF5; desde una actuación con fecha de notificación
+// se puede generar un PlazoJudicial (RN-20, próximo paso).
+model Actuacion {
+  id              Int            @id @default(autoincrement())
+
+  // FK obligatoria: toda actuación pertenece a un expediente.
+  expedienteId    Int
+  expediente      Expediente     @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+
+  // FK opcional: quién presentó/notificó, si corresponde.
+  // onDelete: SetNull porque ParteProcesal es hard-delete (Módulo 1) —
+  // si se borra la parte por error, la actuación no debe desaparecer
+  // ni bloquear el borrado.
+  parteProcesalId Int?
+  parteProcesal   ParteProcesal? @relation(fields: [parteProcesalId], references: [id], onDelete: SetNull)
+
+  tipo            TipoActuacion
+
+  // Fecha en que ocurrió el acto procesal (providencia dictada,
+  // escrito presentado, etc.) — no confundir con fechaNotificacion.
+  fecha           DateTime       @db.Date
+
+  descripcion     String         @db.Text
+
+  // Fecha desde la cual se tiene por notificada la actuación
+  // (RN-20: hito que origina el cómputo de un plazo). Opcional
+  // porque no toda actuación implica notificación formal.
+  fechaNotificacion DateTime?    @db.Date
+
+  creadoEn        DateTime       @default(now())
+  actualizadoEn   DateTime       @updatedAt
+
+  plazos          PlazoJudicial[]
+  // Orden cronológico descendente es el uso principal en la ficha
+  // del expediente — este índice lo acelera.
+  @@index([expedienteId, fecha])
+
+  @@map("actuaciones")
+}
+
+// ============================================================
+// MÓDULO 2 — Catálogos de plazos (TipoPlazo, DiaNoHabil)
+// Van antes de PlazoJudicial porque este último depende de ambos.
+// ============================================================
+
+// ------------------------------------------------------------
+// MODALIDAD DE CÓMPUTO DEL PLAZO
+// HABILES  → cuenta solo días hábiles (excluye fines de semana y
+//            los DiaNoHabil cargados). Uso típico: fuero civil/laboral.
+// CORRIDOS → cuenta todos los días calendario sin excepción.
+//            Uso típico: fuero penal por defecto (RN-19).
+// HORAS    → no se calcula: la abogada carga directamente la fecha
+//            y hora límite (frecuente en fuero penal, 24-48hs).
+// ------------------------------------------------------------
+enum ModalidadPlazo {
+  HABILES
+  CORRIDOS
+  HORAS
+}
+
+// ------------------------------------------------------------
+// FUERO APLICABLE (solo para TipoPlazo)
+// Enum SEPARADO del enum Fuero que usa Expediente/PlantillaEscrito.
+// Motivo: agregar TODOS acá no debe habilitar ese valor en
+// Expediente.fuero (un juicio real es de un solo fuero concreto).
+// Al ser un enum distinto, la base de datos hace estructuralmente
+// imposible que Expediente.fuero valga TODOS, sin depender de que
+// el código de la aplicación lo valide correctamente siempre.
+// ------------------------------------------------------------
+enum FueroAplicable {
+  CIVIL_COMERCIAL
+  LABORAL
+  PENAL
+  NINEZ_ADOLESCENCIA
+  CONTENCIOSO_ADMINISTRATIVO
+  OTRO
+  TODOS   // el tipo de plazo se sugiere sin importar el fuero del expediente
+}
+
+// ------------------------------------------------------------
+// CATÁLOGO DE TIPOS DE PLAZO
+// Ej: "Contestación de demanda civil" (18 días hábiles),
+// "Contestación laboral" (6 días hábiles), etc. — mismos plazos
+// que dio la abogada, uno por fila (no se comparte fila entre fueros
+// aunque el nombre se parezca, porque los días default difieren).
+//
+// diasDefault y modalidadDefault son SUGERENCIAS: al cargar un
+// PlazoJudicial concreto, la abogada puede cambiar ambos valores
+// para ese caso puntual (RN-19: en penal a veces cambia de corridos
+// a horas según la actuación). El catálogo no impone una regla
+// rígida, solo evita empezar de cero cada vez.
+//
+// Mismo patrón que TipoTramite: no se borra si tiene plazos
+// asociados, se inactiva.
+// ------------------------------------------------------------
+model TipoPlazo {
+  id                Int             @id @default(autoincrement())
+  nombre            String          @db.VarChar(150)   // ej: "Contestación de demanda civil"
+  fuero             FueroAplicable  @default(TODOS)
+  diasDefault       Int                                 // sugerencia de cantidad (18, 6, 5, 3...)
+  modalidadDefault  ModalidadPlazo  @default(HABILES)
+  activo            Boolean         @default(true)
+  creadoEn          DateTime        @default(now())
+  actualizadoEn     DateTime        @updatedAt
+
+  plazos            PlazoJudicial[]
+
+  // Mismo nombre puede repetirse para distinto fuero (son filas
+  // distintas a propósito), pero no dos veces para el MISMO fuero.
+  @@unique([nombre, fuero])
+  @@map("tipos_plazo")
+}
+
+// ------------------------------------------------------------
+// DÍAS NO HÁBILES
+// Una sola tabla para feriados nacionales, asuetos locales y feria
+// judicial (RN-23: se cargan a nivel nacional; asuetos locales se
+// ajustan manualmente) — la diferencia está en QUIÉN carga cada
+// fila y CUÁNDO (seed anual vs carga manual puntual), no en la
+// estructura: ambas son simplemente "un día que no cuenta para
+// el cómputo de plazos en días hábiles".
+//
+// fechaHasta permite cargar un RANGO de una sola vez (ej. feria
+// judicial 1 al 31 de enero) sin crear 31 filas sueltas.
+// Un feriado de un solo día deja fechaHasta = null (o igual a
+// fechaDesde).
+// ------------------------------------------------------------
+model DiaNoHabil {
+  id           Int       @id @default(autoincrement())
+  fechaDesde   DateTime  @db.Date
+  fechaHasta   DateTime? @db.Date   // null = es un solo día (fechaDesde)
+  descripcion  String    @db.VarChar(200)   // ej: "Feria judicial de enero", "Asueto local Encarnación"
+  creadoEn     DateTime  @default(now())
+
+  @@index([fechaDesde])
+  @@map("dias_no_habiles")
+}
+
+// ============================================================
+// MÓDULO 2 — PlazoJudicial (núcleo de RF6)
+// El semáforo (verde/amarillo/rojo/vencido) NO se guarda como
+// campo: se calcula al vuelo en el service, comparando hoy con
+// fechaVencimiento, cada vez que se consulta. Así nunca queda
+// desactualizado (mismo criterio que ya usás en calendarioRuc.js
+// para las fechas: se calcula cuando hace falta, no se persiste
+// un resultado que puede quedar viejo).
+// ============================================================
+
+enum EstadoPlazo {
+  PENDIENTE
+  CUMPLIDO
+}
+
+model PlazoJudicial {
+  id                Int             @id @default(autoincrement())
+
+  expedienteId      Int
+  expediente        Expediente      @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+
+  actuacionId       Int?
+  actuacion         Actuacion?      @relation(fields: [actuacionId], references: [id], onDelete: SetNull)
+
+  tipoPlazoId       Int
+  tipoPlazo         TipoPlazo       @relation(fields: [tipoPlazoId], references: [id])
+
+  diasCantidad      Int
+  modalidad         ModalidadPlazo
+
+  fechaNotificacion DateTime        @db.Date
+  fechaVencimiento  DateTime        @db.Date
+  horaLimite        DateTime?
+
+  estado            EstadoPlazo     @default(PENDIENTE)
+  fechaCumplido     DateTime?
+
+  observaciones     String?         @db.VarChar(300)
+
+  creadoEn          DateTime        @default(now())
+  actualizadoEn     DateTime        @updatedAt
+
+  @@index([estado, fechaVencimiento])
+  @@index([expedienteId])
+  @@map("plazos_judiciales")
 }
