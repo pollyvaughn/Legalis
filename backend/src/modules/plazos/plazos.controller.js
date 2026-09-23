@@ -5,7 +5,7 @@
 // de errores.
 // ============================================================
 
-const plazoService = require('./plazo.service');
+const plazoService = require('./plazos.service');
 
 // GET /api/expedientes/:expedienteId/plazos/calcular
 // Solo calcula y devuelve la sugerencia — NO guarda nada.

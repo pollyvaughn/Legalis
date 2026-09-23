@@ -117,12 +117,15 @@ app.use(
 app.use(
   '/api/expedientes/:expedienteId/plazos',
   protegido,
-  require('./modules/plazos/plazo.routes')
+  require('./modules/plazos/plazos.routes')
 );
 app.use(
   '/api/plazos',
   protegido,
-  require('./modules/plazos/plazo.routes.propias')
+  require('./modules/plazos/plazos.routes.propias')
 );
+
+app.use('/api/tipos-plazo', protegido, require('./modules/tipos-plazo/tipos-plazo.routes'));
+app.use('/api/dias-no-habiles', protegido, require('./modules/dias-no-habiles/dia-no-habil.routes'));
 
 module.exports = app;

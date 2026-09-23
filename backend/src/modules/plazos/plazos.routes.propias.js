@@ -11,7 +11,7 @@
 // ============================================================
 const express = require('express');
 const router = express.Router();
-const controller = require('./plazo.controller');
+const controller = require('./plazos.controller');
 const { requiereRol } = require('../../middlewares/auth.middleware');
 
 const soloAbogado = requiereRol('ABOGADO');
