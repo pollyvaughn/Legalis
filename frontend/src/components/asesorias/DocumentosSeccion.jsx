@@ -114,15 +114,15 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
   }
 
   return (
-    <div className="border-t border-gray-100 pt-5">
+    <div className="border-gray-200">
       {/* --- Título + acción --- */}
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h4 className="text-sm font-medium text-gray-700">Documentos recibidos</h4>
+        <h2 className="text-base font-semibold text-gray-900">Documentos recibidos</h2>
           <p className="text-xs text-gray-400">Solo se registra la recepción; no se suben archivos.</p>
         </div>
         {esAbogado && !form && (
-          <Button variant="secondary" size="sm" onClick={abrirNuevo}>
+          <Button size="sm" onClick={abrirNuevo}>
             + Registrar recepción
           </Button>
         )}

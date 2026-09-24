@@ -249,7 +249,7 @@ function UsuariosPage() {
                 <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-5 py-3 font-medium text-gray-900">
                     {u.nombre}
-                    {u.id === yo?.id && <span className="ml-2 text-xs font-normal text-gray-400">(vos)</span>}
+                    {u.id === yo?.id && <span className="ml-2 text-xs font-normal text-gray-400">(tú)</span>}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{u.email}</td>
                   <td className="px-5 py-3 text-gray-600">{u.rol === 'ABOGADO' ? 'Abogada' : 'Asistente'}</td>
