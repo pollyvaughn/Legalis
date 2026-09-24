@@ -8,6 +8,12 @@
 // via PUT con { activo: false/true }, con confirmación previa.
 // La edición de partes procesales es independiente: cada parte
 // se edita inline por fila, sin relación con el form de arriba.
+//
+// Actuaciones y Plazos (Módulo 2) se agregan como dos secciones
+// más, al final, siguiendo el mismo patrón de Partes/Documentos.
+// Los plazos se cargan aparte (GET /expedientes/:id/plazos) en vez
+// de venir incluidos en el GET del expediente, porque ese endpoint
+// es el único que calcula el semáforo al vuelo (ver plazo.service.js).
 // ============================================
 
 import { useEffect, useState } from 'react';
@@ -22,6 +28,8 @@ import { OPCIONES_FUERO, etiquetaFuero } from '../../constants/fueros';
 import { OPCIONES_ESTADO_PROCESAL, etiquetaEstadoProcesal } from '../../constants/estadosProcesales';
 import { useAuth } from '../../context/AuthContext';
 import DocumentosSeccion from '../../components/asesorias/DocumentosSeccion';
+import ActuacionesSeccion from '../../components/expedientes/ActuacionesSeccion';
+import PlazosSeccion from '../../components/expedientes/PlazosSeccion';
 
 // Roles procesales posibles, según el enum del schema de Prisma.
 // Si el enum cambia en el backend, hay que actualizar esta lista.
@@ -81,13 +89,18 @@ function ExpedienteDetailPage() {
   const [rolEspecificoEdit, setRolEspecificoEdit] = useState('');
   const [guardandoEdit, setGuardandoEdit] = useState(false);
   const [errorEdit, setErrorEdit] = useState('');
-  
+
   // Estado del modal de confirmación para ELIMINAR una parte.
   // parteAEliminar guarda la parte completa (null = modal cerrado)
   // para poder mostrar su nombre en el mensaje de confirmación.
   const [parteAEliminar, setParteAEliminar] = useState(null);
   const [eliminandoParte, setEliminandoParte] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState('');
+
+  // Plazos judiciales del expediente (Módulo 2). Se cargan aparte
+  // del expediente porque este endpoint calcula el semáforo al
+  // vuelo (ver PlazosSeccion / plazo.service.js).
+  const [plazos, setPlazos] = useState([]);
 
   // ------------------------------------------
   // Trae el expediente del backend. Pide incluirInactivos=true
@@ -105,8 +118,28 @@ function ExpedienteDetailPage() {
     }
   }
 
+  // IMPORTANTE: este efecto es el que dispara la carga inicial del
+  // expediente. Sin él, cargarExpediente() queda definida pero
+  // nunca se ejecuta, y la pantalla se queda en "Cargando..." para
+  // siempre (bug detectado y corregido el 23/09/2026).
   useEffect(() => {
     cargarExpediente();
+  }, [id]);
+
+  // Carga los plazos judiciales del expediente, con el semáforo ya
+  // calculado por el backend. Falla en silencio: si no carga, la
+  // sección de Plazos simplemente muestra "no hay plazos" en vez
+  // de romper toda la pantalla del expediente.
+  useEffect(() => {
+    async function cargarPlazos() {
+      try {
+        const respuesta = await api.get(`/expedientes/${id}/plazos`);
+        setPlazos(respuesta.data);
+      } catch (err) {
+        // silencioso a propósito, ver comentario arriba
+      }
+    }
+    cargarPlazos();
   }, [id]);
 
   // ------------------------------------------
@@ -116,7 +149,7 @@ function ExpedienteDetailPage() {
   function iniciarEdicion() {
     setForm({
       numeroExpediente: expediente.numeroExpediente,
-      anio: expediente.anio, // NUEVO
+      anio: expediente.anio,
       caratula: expediente.caratula,
       fuero: expediente.fuero || '',
       jurisdiccion: expediente.jurisdiccion || '',
@@ -125,7 +158,7 @@ function ExpedienteDetailPage() {
       objetoJuicio: expediente.objetoJuicio || '',
       montoJuicio: expediente.montoJuicio ?? '',
       unidadFiscal: expediente.unidadFiscal || '',
-      estadoProcesal: expediente.estadoProcesal, // NUEVO
+      estadoProcesal: expediente.estadoProcesal,
     });
     setErrorForm('');
     setEditando(true);
@@ -192,14 +225,14 @@ function ExpedienteDetailPage() {
         nombre: nombreParte,
         documento: documentoParte || undefined,
         rol: rolParte,
-        rolEspecifico: rolEspecificoParte || undefined, // NUEVO
+        rolEspecifico: rolEspecificoParte || undefined,
       });
 
       // Limpia el form y lo cierra
       setNombreParte('');
       setDocumentoParte('');
       setRolParte(ROLES_PROCESALES[0]);
-      setRolEspecificoParte(''); // NUEVO
+      setRolEspecificoParte('');
       setMostrarFormAgregar(false);
 
       // Refresca el expediente para mostrar la parte nueva
@@ -299,7 +332,7 @@ function ExpedienteDetailPage() {
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
         <div className="mb-5 flex items-start justify-between">
           <div>
-          <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-xl font-semibold text-gray-900">
               {expediente.numeroExpediente}/{expediente.anio}
             </h1>
             <p className="mt-1 text-sm text-gray-500">{expediente.caratula}</p>
@@ -382,8 +415,8 @@ function ExpedienteDetailPage() {
           // dueño requiere un flujo explícito, no un campo suelto).
           // ------------------------------------------
           <form onSubmit={handleGuardar} className="space-y-4 border-t border-gray-100 pt-5">
-                        {/* Número y año van juntos: forman la identificación del expediente */}
-                        <div className="grid grid-cols-2 gap-4">
+            {/* Número y año van juntos: forman la identificación del expediente */}
+            <div className="grid grid-cols-2 gap-4">
               <Input
                 label="N° Expediente"
                 name="numeroExpediente"
@@ -642,7 +675,21 @@ function ExpedienteDetailPage() {
           onChange={(lista) => setExpediente((e) => ({ ...e, documentosRecibidos: lista }))}
         />
       </div>
-      
+
+      {/* --- Actuaciones del expediente (Módulo 2) --- */}
+      <div className="mt-6">
+        <ActuacionesSeccion
+          expedienteId={id}
+          actuaciones={expediente.actuaciones || []}
+          onChange={(lista) => setExpediente((e) => ({ ...e, actuaciones: lista }))}
+        />
+      </div>
+
+      {/* --- Plazos judiciales del expediente (Módulo 2) --- */}
+      <div className="mt-6">
+        <PlazosSeccion expedienteId={id} plazos={plazos} onChange={setPlazos} />
+      </div>
+
       {/* --- Modal de confirmación para inactivar/reactivar --- */}
       {mostrarConfirmacion && (
         <Modal
@@ -688,7 +735,6 @@ function ExpedienteDetailPage() {
           </Modal.Footer>
         </Modal>
       )}
-      {/* ↑ hasta acá es el modal de inactivar/reactivar (ya existe) */}
 
       {/* --- Modal de confirmación para ELIMINAR una parte (borrado real) --- */}
       {parteAEliminar && (

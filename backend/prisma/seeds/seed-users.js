@@ -18,7 +18,7 @@
 // ==========================================
 
 require('dotenv').config();
-const prisma = require('../src/config/database');
+const prisma = require('../../src/config/database');
 const bcrypt = require('bcrypt');
 
 // CANTIDAD DE "SALT ROUNDS" para bcrypt: cuántas veces se re-hashea

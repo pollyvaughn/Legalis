@@ -21,6 +21,7 @@ import AsesoriasPage from './pages/asesorias/AsesoriasPage';
 import CambiarPasswordPage from './pages/CambiarPasswordPage';
 import PerfilPage from './pages/PerfilPage';
 import UsuariosPage from './pages/usuarios/UsuariosPage';
+import CalendarioPlazosPage from './pages/calendario/CalendarioPlazosPage';
 
 function App() {
   return (
@@ -109,18 +110,18 @@ function App() {
           }
         />
 
-        {/* --- Módulos aún sin backend: todos apuntan al mismo placeholder --- */}
-
         <Route
           path="/calendario"
           element={
             <RutaProtegida>
               <AppLayout>
-                <ProximamentePage />
+                <CalendarioPlazosPage />
               </AppLayout>
             </RutaProtegida>
           }
         />
+
+        {/* --- Módulos aún sin backend: todos apuntan al mismo placeholder --- */}
 
         <Route
           path="/honorarios"

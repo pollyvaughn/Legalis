@@ -82,12 +82,15 @@ async function listarPorExpediente(req, res, next) {
   }
 }
 
-// GET /api/plazos
-// Panel de alertas / dashboard: todos los pendientes, ordenados
-// por urgencia (vencido > rojo > amarillo > verde).
+// GET /api/plazos?incluirCumplidos=true
+// Panel de alertas / dashboard: por defecto solo pendientes,
+// ordenados por urgencia (vencido > rojo > amarillo > verde).
+// Con incluirCumplidos=true trae también los ya resueltos, para
+// la vista "Calendario & Plazos" (historial completo).
 async function listarPendientesGlobal(req, res, next) {
   try {
-    const plazos = await plazoService.listarPendientesGlobal();
+    const incluirCumplidos = req.query.incluirCumplidos === 'true';
+    const plazos = await plazoService.listarPendientesGlobal({ incluirCumplidos });
     return res.json(plazos);
   } catch (error) {
     return next(error);

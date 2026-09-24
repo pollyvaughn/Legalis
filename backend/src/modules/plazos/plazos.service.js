@@ -171,14 +171,17 @@ async function listarPorExpediente(expedienteId) {
 }
 
 // ------------------------------------------------------------
-// Listar TODOS los plazos pendientes, para el dashboard/panel de
-// alertas (RF6: "listado de vencimientos pendientes ordenado por
-// urgencia"). Trae también datos básicos del expediente para
-// poder armar el link/carátula en el frontend sin otra consulta.
+// Listar plazos del estudio para el panel de alertas / calendario
+// (RF6). Por defecto solo PENDIENTES (uso original: dashboard de
+// alertas). Con incluirCumplidos=true trae también los CUMPLIDOS,
+// para la vista "Calendario & Plazos" que necesita historial
+// completo, no solo lo pendiente. El nombre de la función quedó
+// desde la versión original (solo pendientes); se mantiene para
+// no romper el import en el controller.
 // ------------------------------------------------------------
-async function listarPendientesGlobal() {
+async function listarPendientesGlobal({ incluirCumplidos = false } = {}) {
   const plazos = await prisma.plazoJudicial.findMany({
-    where: { estado: 'PENDIENTE' },
+    where: incluirCumplidos ? {} : { estado: 'PENDIENTE' },
     orderBy: { fechaVencimiento: 'asc' },
     include: {
       tipoPlazo: { select: { id: true, nombre: true } },
@@ -188,11 +191,12 @@ async function listarPendientesGlobal() {
   const conColor = plazos.map(conSemaforo);
 
   // Orden final "por urgencia": vencidos primero, después rojo,
-  // amarillo, verde. orderBy de Prisma ya ordenó por fecha, pero
-  // como el semáforo no es un campo de la base, este reordenamiento
-  // fino se hace acá en memoria (la cantidad de plazos pendientes
-  // de un estudio unipersonal es chica, no hay problema de rendimiento).
-  const prioridad = { VENCIDO: 0, ROJO: 1, AMARILLO: 2, VERDE: 3 };
+  // amarillo, verde, y cumplidos al final. orderBy de Prisma ya
+  // ordenó por fecha, pero como el semáforo no es un campo de la
+  // base, este reordenamiento fino se hace acá en memoria (la
+  // cantidad de plazos de un estudio unipersonal es chica, no hay
+  // problema de rendimiento).
+  const prioridad = { VENCIDO: 0, ROJO: 1, AMARILLO: 2, VERDE: 3, CUMPLIDO: 4 };
   return conColor.sort((a, b) => prioridad[a.semaforo] - prioridad[b.semaforo]);
 }
 
