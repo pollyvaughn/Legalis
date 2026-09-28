@@ -38,13 +38,25 @@ async function crear(datos) {
 
 // ------------------------------------------------------------
 // Listar tipos de plazo
-// Por defecto solo activos (para selects del formulario); con
-// incluirInactivos=true se ven todos (para la pantalla de catálogo).
+// estado: 'activos' (default) | 'inactivos' | 'todos' — mismo
+// patrón que tipos-tramite. busqueda filtra por nombre (contains,
+// insensitive). Incluye _count.plazos: la pantalla de catálogo lo
+// usa para decidir si el tipo se puede eliminar (solo si nunca se
+// usó, ver eliminar() más abajo).
 // ------------------------------------------------------------
-async function listar({ incluirInactivos = false } = {}) {
+async function listar({ estado = 'activos', busqueda } = {}) {
+  const filtroActivo =
+    estado === 'activos' ? { activo: true } : estado === 'inactivos' ? { activo: false } : {};
+
   return prisma.tipoPlazo.findMany({
-    where: incluirInactivos ? {} : { activo: true },
+    where: {
+      ...filtroActivo,
+      ...(busqueda ? { nombre: { contains: busqueda, mode: 'insensitive' } } : {}),
+    },
     orderBy: [{ fuero: 'asc' }, { nombre: 'asc' }],
+    include: {
+      _count: { select: { plazos: true } },
+    },
   });
 }
 

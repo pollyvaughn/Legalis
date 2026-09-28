@@ -26,11 +26,11 @@ async function crear(req, res, next) {
   }
 }
 
-// GET /api/tipos-plazo?incluirInactivos=true
+// GET /api/tipos-plazo?estado=activos|inactivos|todos&busqueda=texto
 async function listar(req, res, next) {
   try {
-    const incluirInactivos = req.query.incluirInactivos === 'true';
-    const tipos = await tipoPlazoService.listar({ incluirInactivos });
+    const { estado, busqueda } = req.query;
+    const tipos = await tipoPlazoService.listar({ estado, busqueda });
     return res.json(tipos);
   } catch (error) {
     return next(error);

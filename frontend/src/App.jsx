@@ -22,6 +22,8 @@ import CambiarPasswordPage from './pages/CambiarPasswordPage';
 import PerfilPage from './pages/PerfilPage';
 import UsuariosPage from './pages/usuarios/UsuariosPage';
 import CalendarioPlazosPage from './pages/calendario/CalendarioPlazosPage';
+import CatalogoTiposPlazoPage from './pages/calendario/CatalogoTiposPlazoPage';
+import CatalogoDiasNoHabilesPage from './pages/calendario/CatalogoDiasNoHabilesPage';
 
 function App() {
   return (
@@ -116,6 +118,28 @@ function App() {
             <RutaProtegida>
               <AppLayout>
                 <CalendarioPlazosPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/calendario/tipos-plazo"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <CatalogoTiposPlazoPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        <Route
+          path="/calendario/dias-no-habiles"
+          element={
+            <RutaProtegida>
+              <AppLayout>
+                <CatalogoDiasNoHabilesPage />
               </AppLayout>
             </RutaProtegida>
           }
