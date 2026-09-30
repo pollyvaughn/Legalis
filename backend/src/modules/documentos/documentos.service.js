@@ -8,6 +8,7 @@
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
 const { siVino, limpiarTexto } = require('../../utils/entrada');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------------------------
 // HELPER: verificarPadre
@@ -40,15 +41,28 @@ const listarDocumentos = async (padre) => {
 // Al hacer ...padre solo se completa UNA de las dos claves foráneas;
 // la otra queda en null.
 // ------------------------------------------------------------
-const crearDocumento = async (padre, { tipoDocumento, fechaRecepcion, observaciones }) => {
+const crearDocumento = async (padre, { tipoDocumento, fechaRecepcion, observaciones }, usuarioId) => {
   await verificarPadre(padre);
-  return prisma.documentoRecibido.create({
-    data: {
-      ...padre,
-      tipoDocumento: tipoDocumento.trim(),
-      fechaRecepcion,
-      observaciones: limpiarTexto(observaciones),
-    },
+
+  return prisma.$transaction(async (tx) => {
+    const documento = await tx.documentoRecibido.create({
+      data: {
+        ...padre,
+        tipoDocumento: tipoDocumento.trim(),
+        fechaRecepcion,
+        observaciones: limpiarTexto(observaciones),
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'DocumentoRecibido',
+      entidadId: documento.id,
+      detalle: descripcionDocumento(documento, padre),
+    });
+
+    return documento;
   });
 };
 
@@ -58,20 +72,63 @@ const crearDocumento = async (padre, { tipoDocumento, fechaRecepcion, observacio
 // lugar equivocado, se elimina y se registra de nuevo.
 // Si el id no existe, Prisma lanza P2025 y el controller responde 404.
 // ------------------------------------------------------------
-const actualizarDocumento = async (id, datos) => {
+const actualizarDocumento = async (id, datos, usuarioId) => {
   const data = {};
   if (siVino(datos, 'tipoDocumento')) data.tipoDocumento = datos.tipoDocumento.trim();
   if (siVino(datos, 'fechaRecepcion')) data.fechaRecepcion = datos.fechaRecepcion;
   if (siVino(datos, 'observaciones')) data.observaciones = limpiarTexto(datos.observaciones);
 
-  return prisma.documentoRecibido.update({ where: { id }, data });
+  return prisma.$transaction(async (tx) => {
+    const documento = await tx.documentoRecibido.update({ where: { id }, data });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'DocumentoRecibido',
+      entidadId: id,
+      detalle: descripcionDocumento(documento, {
+        tramiteId: documento.tramiteId,
+        expedienteId: documento.expedienteId,
+      }),
+    });
+
+    return documento;
+  });
 };
 
 // ------------------------------------------------------------
 // ELIMINAR (definitivo: es una línea de un registro, nada depende de ella)
+// Ahora recibe usuarioId para la auditoría. Se guarda el documento
+// ANTES de borrar (después ya no se puede leer de la base).
 // ------------------------------------------------------------
-const eliminarDocumento = async (id) => {
-  return prisma.documentoRecibido.delete({ where: { id } });
+const eliminarDocumento = async (id, usuarioId) => {
+  const documento = await prisma.documentoRecibido.findUniqueOrThrow({ where: { id } });
+
+  return prisma.$transaction(async (tx) => {
+    await tx.documentoRecibido.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'DocumentoRecibido',
+      entidadId: id,
+      detalle: descripcionDocumento(documento, {
+        tramiteId: documento.tramiteId,
+        expedienteId: documento.expedienteId,
+      }),
+    });
+  });
+};
+
+// ------------------------------------------------------------
+// HELPER: descripcionDocumento
+// Arma un texto legible para la auditoría, sea de trámite o expediente.
+// ------------------------------------------------------------
+const descripcionDocumento = (doc, padre) => {
+  const origen = padre.tramiteId
+    ? `trámite #${padre.tramiteId}`
+    : `expediente #${padre.expedienteId}`;
+  return `${doc.tipoDocumento} recibido en ${origen}`;
 };
 
 module.exports = { listarDocumentos, crearDocumento, actualizarDocumento, eliminarDocumento };

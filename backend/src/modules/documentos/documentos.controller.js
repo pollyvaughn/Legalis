@@ -64,7 +64,7 @@ const crearEn = async (req, res, padre) => {
     const { error, datos } = leerCampos(req.body, true);
     if (error) return res.status(400).json({ error });
 
-    res.status(201).json(await service.crearDocumento(padre, datos));
+    res.status(201).json(await service.crearDocumento(padre, datos, req.usuario.id));
   } catch (err) {
     responderError(res, err, 'Error al registrar el documento', NO_ENCONTRADO);
   }
@@ -119,7 +119,7 @@ const actualizar = async (req, res) => {
       return res.status(400).json({ error: 'No hay nada para actualizar (tipoDocumento, fechaRecepcion u observaciones)' });
     }
 
-    res.json(await service.actualizarDocumento(id, datos));
+    res.json(await service.actualizarDocumento(id, datos, req.usuario.id));
   } catch (err) {
     responderError(res, err, 'Error al actualizar el documento', NO_ENCONTRADO);
   }
@@ -131,7 +131,7 @@ const eliminar = async (req, res) => {
     const id = idDeUrl(req.params.id);
     if (!id) return res.status(400).json({ error: 'ID inválido' });
 
-    await service.eliminarDocumento(id);
+    await service.eliminarDocumento(id, req.usuario.id);
     res.json({ mensaje: 'Documento eliminado' });
   } catch (err) {
     responderError(res, err, 'Error al eliminar el documento', NO_ENCONTRADO);
