@@ -20,7 +20,6 @@ app.use(cors());
 // Parsea automáticamente el body de las peticiones como JSON
 // Sin esto, req.body llegaría undefined en POST/PUT
 app.use(express.json());
-
 // ------------------------------------------
 // RUTA DE PRUEBA (health check)
 // Pública a propósito: sirve para confirmar que el server responde

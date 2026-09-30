@@ -34,7 +34,7 @@ async function crear(req, res) {
       return res.status(400).json({ error: 'El año no es válido' });
     }
 
-    const expediente = await expedientesService.crearExpediente(req.body);
+    const expediente = await expedientesService.crearExpediente(req.body, req.usuario.id);
     res.status(201).json(expediente);
   } catch (error) {
     // Regla de negocio incumplida (cliente inexistente o inactivo): trae su propio código HTTP
@@ -119,7 +119,7 @@ async function obtenerPorId(req, res) {
 // ------------------------------------------
 async function actualizar(req, res) {
   try {
-    const expediente = await expedientesService.actualizarExpediente(req.params.id, req.body);
+    const expediente = await expedientesService.actualizarExpediente(req.params.id, req.body, req.usuario.id);
     res.json(expediente);
   } catch (error) {
     if (error.code === 'P2025') {

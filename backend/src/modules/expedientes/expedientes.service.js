@@ -6,15 +6,13 @@
 
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------
 // HELPER: siVino
 // Devuelve el valor solo si fue enviado (no undefined).
 // Sirve para que un PUT parcial (ej: solo { activo: false })
 // no pise campos que no vinieron en el body con "undefined".
-// Prisma ignora las keys en undefined, pero lo hacemos explícito
-// para que el comportamiento sea claro leyendo el código,
-// no algo que "funciona de casualidad".
 // ------------------------------------------
 function siVino(valor) {
   return valor !== undefined ? valor : undefined;
@@ -23,23 +21,26 @@ function siVino(valor) {
 // ------------------------------------------
 // HELPER: limpiarTexto
 // Quita espacios sobrantes al inicio y al final ("Juzgado 3 " -> "Juzgado 3").
-// Se aplica a los campos que forman la unicidad del expediente
-// (numero, juzgado, carátula) para que un espacio de más no
-// permita registrar un duplicado real.
-// Si el valor no vino (undefined) o es null, lo devuelve tal cual
-// para respetar el comportamiento de siVino en los PUT parciales.
 // ------------------------------------------
 function limpiarTexto(valor) {
   return typeof valor === 'string' ? valor.trim() : valor;
 }
 
 // ------------------------------------------
+// HELPER: descripción corta para auditoría
+// Arma un texto legible tipo "Exp. 123/2026 - García c/ López"
+// a partir de un expediente. Evita repetir el armado en cada función.
+// ------------------------------------------
+function descripcionExpediente(expediente) {
+  return `Exp. ${expediente.numeroExpediente}/${expediente.anio} - ${expediente.caratula}`;
+}
+
+// ------------------------------------------
 // CREAR EXPEDIENTE
 // Requiere un clienteId válido (FK obligatoria) y ACTIVO.
-// anio y juzgado son obligatorios (parte de la identificación única).
-// estadoProcesal es opcional: si no viene, Prisma usa el default (EN_TRAMITE).
+// Ahora recibe usuarioId (2do parámetro) para la auditoría.
 // ------------------------------------------
-async function crearExpediente(datos) {
+async function crearExpediente(datos, usuarioId) {
   const {
     clienteId,
     numeroExpediente,
@@ -56,9 +57,8 @@ async function crearExpediente(datos) {
   } = datos;
 
   // Regla del checklist 1.1: un cliente inactivo no puede recibir expedientes nuevos.
-  // El formulario ya lo evita (su select solo lista clientes activos), pero el backend
-  // también lo bloquea: la API puede llamarse directo, o el cliente puede inactivarse
-  // mientras el formulario está abierto.
+  // Se valida FUERA de la transacción: es una lectura previa, no una escritura,
+  // así que no hace falta que forme parte de la atomicidad de abajo.
   const cliente = await prisma.cliente.findUnique({
     where: { id: Number(clienteId) },
     select: { activo: true },
@@ -70,50 +70,47 @@ async function crearExpediente(datos) {
     throw new ErrorNegocio('El cliente está inactivo: no se le pueden crear expedientes nuevos', 409);
   }
 
-  return prisma.expediente.create({
-    data: {
-      clienteId: Number(clienteId),
-      numeroExpediente: limpiarTexto(numeroExpediente),
-      anio: Number(anio), // llega como string desde un input HTML
-      caratula: limpiarTexto(caratula),
-      fuero,
-      jurisdiccion,
-      juzgado: limpiarTexto(juzgado),
-      secretaria,
-      objetoJuicio,
-      // montoJuicio es opcional; si viene, lo convertimos a número
-      montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : null,
-      unidadFiscal,
-      estadoProcesal: siVino(estadoProcesal), // undefined = usa el default del schema
-    },
-    // Incluye los datos del cliente en la respuesta, útil para el frontend
-    include: {
-      cliente: true,
-    },
+  // Transacción: crear expediente + registrar auditoría, todo o nada
+  return prisma.$transaction(async (tx) => {
+    const expediente = await tx.expediente.create({
+      data: {
+        clienteId: Number(clienteId),
+        numeroExpediente: limpiarTexto(numeroExpediente),
+        anio: Number(anio), // llega como string desde un input HTML
+        caratula: limpiarTexto(caratula),
+        fuero,
+        jurisdiccion,
+        juzgado: limpiarTexto(juzgado),
+        secretaria,
+        objetoJuicio,
+        montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : null,
+        unidadFiscal,
+        estadoProcesal: siVino(estadoProcesal),
+      },
+      include: {
+        cliente: true,
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'Expediente',
+      entidadId: expediente.id,
+      detalle: descripcionExpediente(expediente),
+    });
+
+    return expediente;
   });
 }
 
 // ------------------------------------------
-// LISTAR EXPEDIENTES (con filtros y paginación)
-// Recibe un objeto de opciones para no depender del orden de
-// parámetros posicionales (ya son demasiados):
-//   clienteId        -> vista focal por cliente
-//   estado -> 'activos' (default) | 'inactivos' | 'todos'
-//   fuero            -> enum Fuero (match exacto)
-//   estadoProcesal   -> enum EstadoProcesal (match exacto)
-//   anio             -> año del expediente (match exacto)
-//   juzgado          -> búsqueda parcial, sin distinguir mayúsculas
-//   busqueda         -> texto libre: busca en número, carátula y
-//                       nombre/razón social del cliente
-//   pagina / limite  -> paginación (página 1 por defecto, 10 por página)
-//
-// Devuelve { datos, total, pagina, limite, totalPaginas } para que
-// el frontend pueda dibujar los controles de paginación.
+// LISTAR EXPEDIENTES (sin cambios — es solo lectura, no se audita)
 // ------------------------------------------
 async function listarExpedientes(opciones = {}) {
   const {
     clienteId,
-    estado = 'activos', // 'activos' | 'inactivos' | 'todos'
+    estado = 'activos',
     fuero,
     estadoProcesal,
     anio,
@@ -123,12 +120,8 @@ async function listarExpedientes(opciones = {}) {
     limite = 10,
   } = opciones;
 
-  // Arma el filtro dinámicamente: solo agrega lo que vino
   const where = {};
 
-  // Filtro de estado (activo/inactivo). Con 'todos' no se agrega
-  // condición: trae ambos. Cualquier valor desconocido cae en 'activos'
-  // (el comportamiento seguro por defecto).
   if (estado === 'inactivos') {
     where.activo = false;
   } else if (estado !== 'todos') {
@@ -147,11 +140,9 @@ async function listarExpedientes(opciones = {}) {
     where.anio = Number(anio);
   }
   if (juzgado) {
-    // contains + insensitive = "LIKE %texto%" sin importar mayúsculas
     where.juzgado = { contains: juzgado, mode: 'insensitive' };
   }
   if (busqueda) {
-    // OR: alcanza con que coincida en uno de los tres campos
     where.OR = [
       { numeroExpediente: { contains: busqueda, mode: 'insensitive' } },
       { caratula: { contains: busqueda, mode: 'insensitive' } },
@@ -159,19 +150,16 @@ async function listarExpedientes(opciones = {}) {
     ];
   }
 
-  // Normaliza paginación: números enteros positivos, máximo 100 por página
   const paginaNum = Math.max(1, Number(pagina) || 1);
   const limiteNum = Math.min(100, Math.max(1, Number(limite) || 10));
 
-  // $transaction con dos consultas: la página de datos y el total
-  // (el total ignora skip/take pero respeta los filtros)
   const [datos, total] = await prisma.$transaction([
     prisma.expediente.findMany({
       where,
       include: { cliente: true },
       orderBy: { createdAt: 'desc' },
-      skip: (paginaNum - 1) * limiteNum, // cuántos saltear
-      take: limiteNum,                   // cuántos traer
+      skip: (paginaNum - 1) * limiteNum,
+      take: limiteNum,
     }),
     prisma.expediente.count({ where }),
   ]);
@@ -186,15 +174,7 @@ async function listarExpedientes(opciones = {}) {
 }
 
 // ------------------------------------------
-// OBTENER UN EXPEDIENTE POR ID
-// Por defecto solo trae expedientes activos (protege contra
-// recuperar soft-deleted por id directo).
-// Pasando incluirInactivos = true se puede traer aunque esté
-// inactivo — útil, por ejemplo, para una futura pantalla de
-// reactivación de expedientes dados de baja.
-// Incluye "partes" (ParteProcesal) solo acá, en el detalle:
-// es la vista de "expandir expediente" donde tiene sentido ver
-// actor/demandado/etc.; el listado general no las necesita.
+// OBTENER UN EXPEDIENTE POR ID (sin cambios — solo lectura)
 // ------------------------------------------
 async function obtenerExpedientePorId(id, incluirInactivos = false) {
   const where = { id: Number(id) };
@@ -209,12 +189,10 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
       cliente: true,
       partes: {
         include: {
-          cliente: true, // por si esa parte también es cliente del estudio
+          cliente: true,
         },
         orderBy: { createdAt: 'asc' },
       },
-      // Documentos recibidos del cliente para este expediente (Módulo 1.3).
-      // Más reciente primero: mismo orden que usa DocumentosSeccion en el front.
       documentosRecibidos: {
         orderBy: [{ fechaRecepcion: 'desc' }, { id: 'desc' }],
       },
@@ -224,16 +202,12 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
 
 // ------------------------------------------
 // ACTUALIZAR EXPEDIENTE
-// No permite editar clienteId: cambiar el "dueño" de un expediente
-// que ya puede tener partes procesales, gastos u honorarios
-// asociados es una operación delicada que merece su propio flujo
-// explícito más adelante, no un campo más del form de edición.
-// numeroExpediente, anio, juzgado y caratula sí se pueden editar
-// (permite corregir un typo o registrar un traslado de juzgado);
-// si el resultado choca con otro expediente, Prisma lanza P2002
-// y el controller lo traduce a un 409.
+// Ahora recibe usuarioId (3er parámetro) para la auditoría.
+// Igual que en clientes: si vino "activo" en el body, distingue
+// INACTIVAR/REACTIVAR de una EDITAR común.
 // ------------------------------------------
-async function actualizarExpediente(id, datos) {
+async function actualizarExpediente(id, datos, usuarioId) {
+  console.log('DEBUG actualizarExpediente ->', { id, usuarioId }); // TEMPORAL, borrar después
   const {
     numeroExpediente,
     anio,
@@ -249,25 +223,44 @@ async function actualizarExpediente(id, datos) {
     activo,
   } = datos;
 
-  return prisma.expediente.update({
-    where: { id: Number(id) },
-    data: {
-      numeroExpediente: siVino(limpiarTexto(numeroExpediente)),
-      anio: anio !== undefined ? Number(anio) : undefined,
-      caratula: siVino(limpiarTexto(caratula)),
-      fuero: siVino(fuero),
-      jurisdiccion: siVino(jurisdiccion),
-      juzgado: siVino(limpiarTexto(juzgado)),
-      secretaria: siVino(secretaria),
-      objetoJuicio: siVino(objetoJuicio),
-      montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : undefined,
-      unidadFiscal: siVino(unidadFiscal),
-      estadoProcesal: siVino(estadoProcesal),
-      activo: siVino(activo),
-    },
-    include: {
-      cliente: true,
-    },
+  const expedienteId = Number(id);
+
+  return prisma.$transaction(async (tx) => {
+    const expedienteActualizado = await tx.expediente.update({
+      where: { id: expedienteId },
+      data: {
+        numeroExpediente: siVino(limpiarTexto(numeroExpediente)),
+        anio: anio !== undefined ? Number(anio) : undefined,
+        caratula: siVino(limpiarTexto(caratula)),
+        fuero: siVino(fuero),
+        jurisdiccion: siVino(jurisdiccion),
+        juzgado: siVino(limpiarTexto(juzgado)),
+        secretaria: siVino(secretaria),
+        objetoJuicio: siVino(objetoJuicio),
+        montoJuicio: montoJuicio !== undefined && montoJuicio !== null ? Number(montoJuicio) : undefined,
+        unidadFiscal: siVino(unidadFiscal),
+        estadoProcesal: siVino(estadoProcesal),
+        activo: siVino(activo),
+      },
+      include: {
+        cliente: true,
+      },
+    });
+
+    // Distingue edición común de inactivar/reactivar (mismo criterio que clientes)
+    let accion = 'EDITAR';
+    if (activo === false) accion = 'INACTIVAR';
+    if (activo === true) accion = 'REACTIVAR';
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion,
+      entidad: 'Expediente',
+      entidadId: expedienteId,
+      detalle: descripcionExpediente(expedienteActualizado),
+    });
+
+    return expedienteActualizado;
   });
 }
 
