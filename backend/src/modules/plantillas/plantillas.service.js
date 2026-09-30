@@ -4,6 +4,7 @@
 // El controller solo recibe/devuelve HTTP; acá se decide qué hacer.
 // ============================================================
 const prisma = require('../../config/database');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------------------------
 // HELPER: siVino
@@ -102,24 +103,36 @@ const obtenerPlantillaPorId = async (id) => {
 // CREAR
 // Campos obligatorios: titulo, contenido, clase, categoria
 // ------------------------------------------------------------
-const crearPlantilla = async (datos) => {
-  return prisma.plantillaEscrito.create({
-    data: {
-      titulo: limpiarTexto(datos.titulo),
-      descripcion: limpiarTexto(datos.descripcion),
-      contenido: datos.contenido.trim(),
-      fuero: datos.fuero || null, // "" -> null (fuero es opcional)
-      clase: datos.clase,
-      categoria: datos.categoria,
-      origen: datos.origen || 'PROPIA',
-    },
+const crearPlantilla = async (datos, usuarioId) => {
+  return prisma.$transaction(async (tx) => {
+    const plantilla = await tx.plantillaEscrito.create({
+      data: {
+        titulo: limpiarTexto(datos.titulo),
+        descripcion: limpiarTexto(datos.descripcion),
+        contenido: datos.contenido.trim(),
+        fuero: datos.fuero || null,
+        clase: datos.clase,
+        categoria: datos.categoria,
+        origen: datos.origen || 'PROPIA',
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'PlantillaEscrito',
+      entidadId: plantilla.id,
+      detalle: plantilla.titulo,
+    });
+
+    return plantilla;
   });
 };
 
 // ------------------------------------------------------------
 // ACTUALIZAR (PUT parcial: solo cambia lo que llegó en el body)
 // ------------------------------------------------------------
-const actualizarPlantilla = async (id, datos) => {
+const actualizarPlantilla = async (id, datos, usuarioId) => {
   const data = {};
 
   if (siVino(datos, 'titulo')) data.titulo = limpiarTexto(datos.titulo);
@@ -130,15 +143,40 @@ const actualizarPlantilla = async (id, datos) => {
   if (siVino(datos, 'categoria')) data.categoria = datos.categoria;
   if (siVino(datos, 'origen')) data.origen = datos.origen;
 
-  return prisma.plantillaEscrito.update({ where: { id }, data });
+  return prisma.$transaction(async (tx) => {
+    const plantilla = await tx.plantillaEscrito.update({ where: { id }, data });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'PlantillaEscrito',
+      entidadId: id,
+      detalle: plantilla.titulo,
+    });
+
+    return plantilla;
+  });
 };
 
 // ------------------------------------------------------------
-// ELIMINAR (HARD-DELETE, decisión 19/09/2026)
+// ELIMINAR (HARD-DELETE)
 // Una plantilla no es un hecho procesal y nada depende de ella.
+// Se guarda el título ANTES de borrar (después ya no se puede leer de la base).
 // ------------------------------------------------------------
-const eliminarPlantilla = async (id) => {
-  return prisma.plantillaEscrito.delete({ where: { id } });
+const eliminarPlantilla = async (id, usuarioId) => {
+  const plantilla = await prisma.plantillaEscrito.findUniqueOrThrow({ where: { id } });
+
+  return prisma.$transaction(async (tx) => {
+    await tx.plantillaEscrito.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'PlantillaEscrito',
+      entidadId: id,
+      detalle: plantilla.titulo,
+    });
+  });
 };
 
 module.exports = {

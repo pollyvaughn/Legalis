@@ -54,7 +54,7 @@ async function crear(req, res) {
   }
 
   try {
-    const resultado = await usuariosService.crear({ nombre, email });
+    const resultado = await usuariosService.crear({ nombre, email }, req.usuario.id);
     // 201 = "creado". Incluye passwordTemporal: el frontend debe
     // mostrarla ahora, porque no se puede volver a consultar.
     return res.status(201).json(resultado);
@@ -81,7 +81,7 @@ async function actualizar(req, res) {
   }
 
   try {
-    const usuario = await usuariosService.actualizar(id, { nombre, email });
+    const usuario = await usuariosService.actualizar(id, { nombre, email }, req.usuario.id);
     return res.status(200).json(usuario);
   } catch (error) {
     return responderError(res, error);
@@ -119,8 +119,7 @@ async function resetearPassword(req, res) {
   }
 
   try {
-    const resultado = await usuariosService.resetearPassword(id);
-    return res.status(200).json(resultado); // { passwordTemporal }
+    const resultado = await usuariosService.resetearPassword(id, req.usuario.id);    return res.status(200).json(resultado); // { passwordTemporal }
   } catch (error) {
     return responderError(res, error);
   }

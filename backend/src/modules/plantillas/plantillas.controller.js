@@ -74,8 +74,7 @@ const crear = async (req, res) => {
     const errorValidacion = validarCampos(req.body, true);
     if (errorValidacion) return res.status(400).json({ error: errorValidacion });
 
-    const nueva = await service.crearPlantilla(req.body);
-    res.status(201).json(nueva);
+    const nueva = await service.crearPlantilla(req.body, req.usuario.id);    res.status(201).json(nueva);
   } catch (error) {
     console.error('Error al crear plantilla:', error);
     res.status(500).json({ error: 'Error al crear la plantilla' });
@@ -95,7 +94,7 @@ const actualizar = async (req, res) => {
     if (req.body.titulo !== undefined && !req.body.titulo?.trim()) return res.status(400).json({ error: 'El título no puede quedar vacío' });
     if (req.body.contenido !== undefined && !req.body.contenido?.trim()) return res.status(400).json({ error: 'El contenido no puede quedar vacío' });
 
-    const actualizada = await service.actualizarPlantilla(id, req.body);
+    const actualizada = await service.actualizarPlantilla(id, req.body, req.usuario.id);
     res.json(actualizada);
   } catch (error) {
     // P2025 = Prisma no encontró el registro a actualizar
@@ -111,8 +110,7 @@ const eliminar = async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
 
-    await service.eliminarPlantilla(id);
-    res.json({ mensaje: 'Plantilla eliminada' });
+    await service.eliminarPlantilla(id, req.usuario.id);    res.json({ mensaje: 'Plantilla eliminada' });
   } catch (error) {
     if (error.code === 'P2025') return res.status(404).json({ error: 'Plantilla no encontrada' });
     console.error('Error al eliminar plantilla:', error);

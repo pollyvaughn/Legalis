@@ -9,6 +9,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const prisma = require('../../config/database');
 const { BCRYPT_ROUNDS } = require('../auth/auth.service');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------
 // CAMPOS QUE SE DEVUELVEN AL FRONTEND
@@ -76,12 +77,13 @@ async function listar() {
 // Alta de un ASISTENTE. Devuelve el usuario creado + la contraseña
 // temporal EN TEXTO PLANO (única vez que existe así: en la base
 // solo se guarda el hash, así que no se puede recuperar después).
+// IMPORTANTE: el "detalle" NUNCA incluye la contraseña temporal
+// (ni siquiera para el ABOGADO): la auditoría no es un lugar
+// seguro para guardar secretos, aunque solo la vea el ABOGADO.
 // ------------------------------------------
-async function crear({ nombre, email }) {
+async function crear({ nombre, email }, usuarioId) {
   const emailNormalizado = normalizarEmail(email);
 
-  // Validación previa de email duplicado: da un mensaje claro en
-  // vez del error crudo de la restricción UNIQUE de la base.
   const existente = await prisma.user.findUnique({ where: { email: emailNormalizado } });
   if (existente) {
     throw new Error('Ya existe un usuario con ese email');
@@ -90,16 +92,28 @@ async function crear({ nombre, email }) {
   const passwordTemporal = generarPasswordTemporal();
   const passwordHash = await bcrypt.hash(passwordTemporal, BCRYPT_ROUNDS);
 
-  const usuario = await prisma.user.create({
-    data: {
-      nombre: nombre.trim(),
-      email: emailNormalizado,
-      passwordHash,
-      rol: 'ASISTENTE',          // siempre ASISTENTE: hay un único ABOGADO
-      activo: true,
-      debeCambiarPassword: true, // obligado a cambiarla en el primer ingreso
-    },
-    select: CAMPOS_PUBLICOS,
+  const usuario = await prisma.$transaction(async (tx) => {
+    const nuevoUsuario = await tx.user.create({
+      data: {
+        nombre: nombre.trim(),
+        email: emailNormalizado,
+        passwordHash,
+        rol: 'ASISTENTE',
+        activo: true,
+        debeCambiarPassword: true,
+      },
+      select: CAMPOS_PUBLICOS,
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'User',
+      entidadId: nuevoUsuario.id,
+      detalle: `${nuevoUsuario.nombre} (${nuevoUsuario.email})`,
+    });
+
+    return nuevoUsuario;
   });
 
   return { usuario, passwordTemporal };
@@ -110,7 +124,7 @@ async function crear({ nombre, email }) {
 // Edita nombre y/o email. El rol, el estado y la contraseña
 // tienen sus propias acciones (no se tocan desde acá).
 // ------------------------------------------
-async function actualizar(id, { nombre, email }) {
+async function actualizar(id, { nombre, email }, usuarioId) {
   const usuario = await prisma.user.findUnique({ where: { id } });
   if (!usuario) {
     throw new Error('Usuario no encontrado');
@@ -122,7 +136,6 @@ async function actualizar(id, { nombre, email }) {
   }
   if (email !== undefined) {
     const emailNormalizado = normalizarEmail(email);
-    // Solo chequea duplicado si el email realmente cambió
     if (emailNormalizado !== usuario.email) {
       const duplicado = await prisma.user.findUnique({ where: { email: emailNormalizado } });
       if (duplicado) {
@@ -132,10 +145,22 @@ async function actualizar(id, { nombre, email }) {
     }
   }
 
-  return prisma.user.update({
-    where: { id },
-    data,
-    select: CAMPOS_PUBLICOS,
+  return prisma.$transaction(async (tx) => {
+    const actualizado = await tx.user.update({
+      where: { id },
+      data,
+      select: CAMPOS_PUBLICOS,
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'User',
+      entidadId: id,
+      detalle: `${actualizado.nombre} (${actualizado.email})`,
+    });
+
+    return actualizado;
   });
 }
 
@@ -154,12 +179,9 @@ async function cambiarEstado(id, activo, idSolicitante) {
   }
 
   if (!activo) {
-    // Regla 1: autodesactivación
     if (id === idSolicitante) {
       throw new Error('No podés desactivar tu propia cuenta');
     }
-
-    // Regla 2: último ABOGADO activo
     if (usuario.rol === 'ABOGADO') {
       const abogadosActivos = await prisma.user.count({
         where: { rol: 'ABOGADO', activo: true },
@@ -170,10 +192,22 @@ async function cambiarEstado(id, activo, idSolicitante) {
     }
   }
 
-  return prisma.user.update({
-    where: { id },
-    data: { activo },
-    select: CAMPOS_PUBLICOS,
+  return prisma.$transaction(async (tx) => {
+    const actualizado = await tx.user.update({
+      where: { id },
+      data: { activo },
+      select: CAMPOS_PUBLICOS,
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId: idSolicitante,
+      accion: activo ? 'REACTIVAR' : 'INACTIVAR',
+      entidad: 'User',
+      entidadId: id,
+      detalle: `${actualizado.nombre} (${actualizado.email})`,
+    });
+
+    return actualizado;
   });
 }
 
@@ -184,8 +218,9 @@ async function cambiarEstado(id, activo, idSolicitante) {
 // para que la cambie al próximo ingreso. Devuelve la temporal
 // en texto plano UNA sola vez.
 // Solo aplica a ASISTENTE: la abogada cambia la suya desde "Mi perfil".
+// El detalle NO incluye la contraseña temporal (ver nota en "crear").
 // ------------------------------------------
-async function resetearPassword(id) {
+async function resetearPassword(id, usuarioId) {
   const usuario = await prisma.user.findUnique({ where: { id } });
   if (!usuario) {
     throw new Error('Usuario no encontrado');
@@ -197,9 +232,19 @@ async function resetearPassword(id) {
   const passwordTemporal = generarPasswordTemporal();
   const passwordHash = await bcrypt.hash(passwordTemporal, BCRYPT_ROUNDS);
 
-  await prisma.user.update({
-    where: { id },
-    data: { passwordHash, debeCambiarPassword: true },
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id },
+      data: { passwordHash, debeCambiarPassword: true },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'User',
+      entidadId: id,
+      detalle: `Reseteo de contraseña: ${usuario.nombre} (${usuario.email})`,
+    });
   });
 
   return { passwordTemporal };
