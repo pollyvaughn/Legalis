@@ -21,7 +21,7 @@ async function crear(req, res) {
       });
     }
 
-    const cliente = await clientesService.crearCliente(req.body);
+    const cliente = await clientesService.crearCliente(req.body, req.usuario.id);
     res.status(201).json(cliente); // 201 = Created
   } catch (error) {
     // P2002 es el código de Prisma para violación de constraint "unique" (ej. ruc duplicado)
@@ -102,7 +102,7 @@ async function obtenerPorId(req, res) {
 // ------------------------------------------
 async function actualizar(req, res) {
   try {
-    const cliente = await clientesService.actualizarCliente(req.params.id, req.body);
+    const cliente = await clientesService.actualizarCliente(req.params.id, req.body, req.usuario.id);
     res.json(cliente);
   } catch (error) {
     // P2025 es el código de Prisma para "registro no encontrado" al actualizar

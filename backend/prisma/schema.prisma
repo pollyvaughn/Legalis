@@ -259,6 +259,8 @@ model User {
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  
+  auditorias   Auditoria[]   // historial de acciones de este usuario
 
   @@map("users")
 }
@@ -636,4 +638,44 @@ model PlazoJudicial {
   @@index([estado, fechaVencimiento])
   @@index([expedienteId])
   @@map("plazos_judiciales")
+}
+
+// ============================================================
+// AUDITORÍA (RNF 11.6 / RN-41)
+// Registra quién hizo qué y cuándo sobre las operaciones
+// relevantes del sistema. Solo consulta para el ABOGADO.
+// No tiene relación (FK) con las entidades auditadas a propósito:
+// la auditoría debe sobrevivir aunque el registro original
+// cambie o se elimine (ej. una plantilla borrada).
+// ============================================================
+
+// Qué tipo de operación se realizó
+enum AccionAuditoria {
+  CREAR
+  EDITAR
+  INACTIVAR
+  REACTIVAR
+  ELIMINAR
+  BAJA        // baja definitiva de obligación periódica
+  COBRAR      // reservado para Módulo 4
+  ANULAR      // reservado para Módulo 4 (recibos)
+}
+
+model Auditoria {
+  id         Int             @id @default(autoincrement())
+
+  // Quién lo hizo. FK real a User: los usuarios nunca se borran (RN-38),
+  // así que es seguro y permite mostrar el nombre en la pantalla.
+  usuarioId  Int
+  usuario    User            @relation(fields: [usuarioId], references: [id])
+
+  accion     AccionAuditoria
+  entidad    String          @db.VarChar(50)   // ej: "Cliente", "Expediente" (texto, no enum: crece sin migrar)
+  entidadId  Int                                // id del registro afectado (sin FK, ver nota arriba)
+  detalle    String?         @db.VarChar(300)   // resumen legible, ej: "García S.A. (RUC 80012345-6)"
+  fecha      DateTime        @default(now())    // se completa solo
+
+  @@index([entidad, entidadId])   // acelera "ver historial de este cliente/expediente"
+  @@index([fecha])                // acelera ordenar/filtrar por fecha
+  @@map("auditoria")
 }

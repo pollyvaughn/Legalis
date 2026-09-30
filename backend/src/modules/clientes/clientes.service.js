@@ -5,6 +5,7 @@
 // ============================================
 
 const prisma = require('../../config/database');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------
 // HELPER: siVino
@@ -18,13 +19,10 @@ function siVino(valor) {
 
 // ------------------------------------------
 // CREAR CLIENTE
-// Crea el Cliente base y, según el tipo, su extensión
-// (PersonaFisica o PersonaJuridica) en una sola transacción.
-// Usamos "create" anidado de Prisma: crea el Cliente y su
-// extensión relacionada en una sola operación atómica
-// (si algo falla, no queda un Cliente "huérfano" sin extensión).
+// (mismo comportamiento de antes) + registra auditoría CREAR.
+// Ahora recibe usuarioId como 2do parámetro para saber quién lo hizo.
 // ------------------------------------------
-async function crearCliente(datos) {
+async function crearCliente(datos, usuarioId) {
   const {
     ruc,
     tipo, // "FISICA" | "JURIDICA"
@@ -40,7 +38,7 @@ async function crearCliente(datos) {
     // Campos específicos de persona jurídica
     tipoSocietario,
     fechaConstitucion,
-    representanteLegal, // NUEVO: quien representa a la empresa (texto libre, opcional)
+    representanteLegal,
   } = datos;
 
   // Arma el objeto base común a ambos tipos
@@ -72,18 +70,31 @@ async function crearCliente(datos) {
       create: {
         tipoSocietario,
         fechaConstitucion: fechaConstitucion ? new Date(fechaConstitucion) : null,
-        representanteLegal, // NUEVO
+        representanteLegal,
       },
     };
   }
 
-  return prisma.cliente.create({
-    data: dataCliente,
-    // "include" trae también los datos de la extensión en la respuesta
-    include: {
-      personaFisica: true,
-      personaJuridica: true,
-    },
+  // Transacción: crear cliente + registrar auditoría, todo o nada
+  return prisma.$transaction(async (tx) => {
+    const cliente = await tx.cliente.create({
+      data: dataCliente,
+      // "include" trae también los datos de la extensión en la respuesta
+      include: {
+        personaFisica: true,
+        personaJuridica: true,
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'Cliente',
+      entidadId: cliente.id,
+      detalle: `${cliente.nombreRazonSocial} (RUC ${cliente.ruc})`,
+    });
+
+    return cliente;
   });
 }
 
@@ -210,7 +221,7 @@ async function obtenerClientePorId(id, incluirInactivos = false) {
 // + su extensión): si uno fallara, no queremos que el otro quede
 // aplicado a medias.
 // ------------------------------------------
-async function actualizarCliente(id, datos) {
+async function actualizarCliente(id, datos, usuarioId) {
   const {
     ruc,
     nombreRazonSocial,
@@ -278,6 +289,21 @@ async function actualizarCliente(id, datos) {
         },
       });
     }
+
+    // Registra la auditoría de la edición (dentro de la misma transacción).
+    // Si vino "activo" en el body, es una inactivación/reactivación;
+    // si no, es una edición común de datos.
+    let accion = 'EDITAR';
+    if (activo === false) accion = 'INACTIVAR';
+    if (activo === true) accion = 'REACTIVAR';
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion,
+      entidad: 'Cliente',
+      entidadId: clienteId,
+      detalle: `${clienteActualizado.nombreRazonSocial} (RUC ${clienteActualizado.ruc})`,
+    });
 
     // Devuelve el cliente completo y actualizado, con su extensión
     return tx.cliente.findUnique({
