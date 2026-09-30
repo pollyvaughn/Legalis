@@ -5,6 +5,7 @@
 // ============================================================
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
+const { registrarAuditoria } = require('../../utils/auditoria');
 const { terminacionRuc, calcularVencimientosDelAnio, fechaDeHoy } = require('../../utils/calendarioRuc');
 const { siVino, limpiarTexto } = require('../../utils/entrada');
 
@@ -48,24 +49,21 @@ const generarVencimientos = async (db, obligacion, ruc, anios, hoy) => {
 
 // ------------------------------------------------------------
 // CREAR obligación + generar los vencimientos del año en curso
-// Todo en UNA transacción: si algo falla, no queda nada a medias.
+// Ahora recibe usuarioId para la auditoría.
 // ------------------------------------------------------------
-const crearObligacion = async ({ clienteId, tipoTramiteId, periodicidad, mesAnual, observaciones }) => {
-  // --- Cliente: debe existir, estar activo y tener un RUC válido ---
+const crearObligacion = async ({ clienteId, tipoTramiteId, periodicidad, mesAnual, observaciones }, usuarioId) => {
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
     select: { id: true, ruc: true, activo: true },
   });
   if (!cliente) throw new ErrorNegocio('Cliente no encontrado', 404);
   if (!cliente.activo) throw new ErrorNegocio('El cliente está inactivo', 409);
-  terminacionRuc(cliente.ruc); // lanza error claro si falta el RUC o tiene formato inválido
+  terminacionRuc(cliente.ruc);
 
-  // --- Trámite del catálogo: debe existir y estar activo ---
   const tipo = await prisma.tipoTramite.findUnique({ where: { id: tipoTramiteId } });
   if (!tipo) throw new ErrorNegocio('Trámite no encontrado en el catálogo', 404);
   if (!tipo.activo) throw new ErrorNegocio('El trámite del catálogo está inactivo', 409);
 
-  // --- No puede haber dos obligaciones ACTIVAS del mismo trámite para el mismo cliente ---
   const repetida = await prisma.obligacionPeriodica.findFirst({
     where: { clienteId, tipoTramiteId, activa: true },
   });
@@ -82,6 +80,15 @@ const crearObligacion = async ({ clienteId, tipoTramiteId, periodicidad, mesAnua
       include: INCLUIR_RELACIONES,
     });
     const generados = await generarVencimientos(tx, obligacion, cliente.ruc, [anioActual], hoy);
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'ObligacionPeriodica',
+      entidadId: obligacion.id,
+      detalle: `${obligacion.tipoTramite.nombre} para ${obligacion.cliente.nombreRazonSocial} (${generados} vencimiento(s) generado(s))`,
+    });
+
     return { obligacion, generados };
   });
 };
@@ -131,9 +138,15 @@ const obtenerObligacion = async (id) => {
 //  - "Futuro" = estrictamente después de hoy.
 // La baja es definitiva: si el cliente retoma el servicio, se crea
 // una obligación nueva (el historial viejo queda separado).
+// Ahora recibe usuarioId para la auditoría. Acción BAJA (no
+// INACTIVAR): RN-17 la trata como definitiva, distinta de
+// inactivar/reactivar un cliente o expediente que sí se puede revertir.
 // ------------------------------------------------------------
-const inactivarObligacion = async (id) => {
-  const obligacion = await prisma.obligacionPeriodica.findUnique({ where: { id } });
+const inactivarObligacion = async (id, usuarioId) => {
+  const obligacion = await prisma.obligacionPeriodica.findUnique({
+    where: { id },
+    include: INCLUIR_RELACIONES,
+  });
   if (!obligacion) throw new ErrorNegocio('Obligación no encontrada', 404);
   if (!obligacion.activa) throw new ErrorNegocio('La obligación ya está inactiva', 409);
 
@@ -145,13 +158,22 @@ const inactivarObligacion = async (id) => {
         obligacionId: id,
         estado: 'PENDIENTE',
         fechaVencimiento: { gt: hoy },
-        documentos: { none: {} }, // sin ningún documento registrado
+        documentos: { none: {} },
       },
     });
     const actualizada = await tx.obligacionPeriodica.update({
       where: { id },
       data: { activa: false },
     });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'BAJA',
+      entidad: 'ObligacionPeriodica',
+      entidadId: id,
+      detalle: `${obligacion.tipoTramite.nombre} de ${obligacion.cliente.nombreRazonSocial} (${count} vencimiento(s) futuro(s) descartado(s))`,
+    });
+
     return { obligacion: actualizada, eliminados: count };
   });
 };
@@ -162,19 +184,34 @@ const inactivarObligacion = async (id) => {
 // ya existen, se puede apretar las veces que sea sin duplicar, y si se
 // olvidó un año, el botón lo cubre igual.
 // Devuelve cuántos vencimientos NUEVOS se crearon.
+// Ahora recibe usuarioId para la auditoría. Se envuelve en
+// $transaction (antes usaba "prisma" directo) para que la
+// generación y el registro de auditoría sean atómicos.
 // ------------------------------------------------------------
-const generarSiguienteAnio = async (id) => {
+const generarSiguienteAnio = async (id, usuarioId) => {
   const obligacion = await prisma.obligacionPeriodica.findUnique({
     where: { id },
-    include: { cliente: { select: { ruc: true } } },
+    include: { cliente: { select: { ruc: true, nombreRazonSocial: true } }, tipoTramite: { select: { nombre: true } } },
   });
   if (!obligacion) throw new ErrorNegocio('Obligación no encontrada', 404);
   if (!obligacion.activa) throw new ErrorNegocio('La obligación está inactiva: no se generan más vencimientos', 409);
 
   const hoy = fechaDeHoy();
   const anioActual = hoy.getUTCFullYear();
-  const generados = await generarVencimientos(prisma, obligacion, obligacion.cliente.ruc, [anioActual, anioActual + 1], hoy);
-  return { generados };
+
+  return prisma.$transaction(async (tx) => {
+    const generados = await generarVencimientos(tx, obligacion, obligacion.cliente.ruc, [anioActual, anioActual + 1], hoy);
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR', // no hay una acción propia de "generar"; se documenta en el detalle
+      entidad: 'ObligacionPeriodica',
+      entidadId: id,
+      detalle: `Generación año siguiente: ${obligacion.tipoTramite.nombre} de ${obligacion.cliente.nombreRazonSocial} (${generados} nuevo(s))`,
+    });
+
+    return { generados };
+  });
 };
 
 // ------------------------------------------------------------
@@ -202,15 +239,14 @@ const criterioFuturosSeguros = (obligacionId, hoy, anio) => ({
 // Lo pasado y lo que ya tuvo movimiento queda como historial.
 // Todo en una transacción. Devuelve { obligacion, eliminados, generados }.
 // ------------------------------------------------------------
-const actualizarObligacion = async (id, datos) => {
+const actualizarObligacion = async (id, datos, usuarioId) => {
   const actual = await prisma.obligacionPeriodica.findUnique({
     where: { id },
-    include: { cliente: { select: { ruc: true } } },
+    include: { cliente: { select: { ruc: true, nombreRazonSocial: true } }, tipoTramite: { select: { nombre: true } } },
   });
   if (!actual) throw new ErrorNegocio('Obligación no encontrada', 404);
   if (!actual.activa) throw new ErrorNegocio('La obligación está inactiva y no se puede editar', 409);
 
-  // Valores finales: lo que llegó, o lo que ya tenía
   const periodicidad = datos.periodicidad ?? actual.periodicidad;
   const mesAnual = periodicidad === 'ANUAL' ? (datos.mesAnual ?? actual.mesAnual) : null;
   if (periodicidad === 'ANUAL' && !mesAnual) {
@@ -224,15 +260,23 @@ const actualizarObligacion = async (id, datos) => {
 
   const hoy = fechaDeHoy();
   const anioActual = hoy.getUTCFullYear();
+  const descripcion = `${actual.tipoTramite.nombre} de ${actual.cliente.nombreRazonSocial}`;
 
   return prisma.$transaction(async (tx) => {
-    // Sin cambio de configuración: solo se guardan los datos (ej: observaciones)
     if (!cambioConfig) {
       const obligacion = await tx.obligacionPeriodica.update({ where: { id }, data, include: INCLUIR_RELACIONES });
+
+      await registrarAuditoria(tx, {
+        usuarioId,
+        accion: 'EDITAR',
+        entidad: 'ObligacionPeriodica',
+        entidadId: id,
+        detalle: descripcion,
+      });
+
       return { obligacion, eliminados: 0, generados: 0 };
     }
 
-    // Años a regenerar: el año en curso + los años futuros que ya tenían vencimientos
     const existentes = await tx.tramite.findMany({ where: { obligacionId: id }, select: { periodo: true } });
     const anios = new Set([anioActual]);
     existentes.forEach(({ periodo }) => {
@@ -240,10 +284,8 @@ const actualizarObligacion = async (id, datos) => {
       if (anio >= anioActual) anios.add(anio);
     });
 
-    // 1. Borrar los futuros pendientes sin documentos (configuración vieja)
     const { count: eliminados } = await tx.tramite.deleteMany({ where: criterioFuturosSeguros(id, hoy) });
 
-    // 2. Guardar la configuración nueva y regenerar
     const obligacion = await tx.obligacionPeriodica.update({ where: { id }, data, include: INCLUIR_RELACIONES });
     const generados = await generarVencimientos(
       tx,
@@ -252,6 +294,15 @@ const actualizarObligacion = async (id, datos) => {
       [...anios].sort((a, b) => a - b),
       hoy
     );
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'ObligacionPeriodica',
+      entidadId: id,
+      detalle: `${descripcion} (config. cambiada: ${eliminados} descartado(s), ${generados} regenerado(s))`,
+    });
+
     return { obligacion, eliminados, generados };
   });
 };
@@ -261,15 +312,31 @@ const actualizarObligacion = async (id, datos) => {
 // Borra los futuros pendientes sin documentos, de todos los años o de
 // uno solo (anio). La obligación sigue activa; se pueden volver a
 // generar con "Generar siguiente año".
+// Ahora recibe usuarioId para la auditoría. Envuelto en
+// $transaction para que el borrado y el registro sean atómicos.
 // ------------------------------------------------------------
-const quitarVencimientosFuturos = async (id, anio) => {
-  const obligacion = await prisma.obligacionPeriodica.findUnique({ where: { id } });
+const quitarVencimientosFuturos = async (id, anio, usuarioId) => {
+  const obligacion = await prisma.obligacionPeriodica.findUnique({
+    where: { id },
+    include: INCLUIR_RELACIONES,
+  });
   if (!obligacion) throw new ErrorNegocio('Obligación no encontrada', 404);
 
-  const { count } = await prisma.tramite.deleteMany({
-    where: criterioFuturosSeguros(id, fechaDeHoy(), anio),
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.tramite.deleteMany({
+      where: criterioFuturosSeguros(id, fechaDeHoy(), anio),
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'ObligacionPeriodica',
+      entidadId: id,
+      detalle: `Quitar futuros: ${obligacion.tipoTramite.nombre} de ${obligacion.cliente.nombreRazonSocial}${anio ? ` (año ${anio})` : ''} — ${count} eliminado(s)`,
+    });
+
+    return { eliminados: count };
   });
-  return { eliminados: count };
 };
 
 module.exports = {

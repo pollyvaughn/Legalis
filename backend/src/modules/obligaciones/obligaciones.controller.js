@@ -77,7 +77,7 @@ const crear = async (req, res) => {
       periodicidad,
       mesAnual: periodicidad === 'ANUAL' ? mesAnual : null, // en las mensuales no se usa
       observaciones: observaciones?.trim() || null,
-    });
+    }, req.usuario.id);
     res.status(201).json(resultado); // { obligacion, generados }
   } catch (error) {
     responderError(res, error, 'Error al crear la obligación', NO_ENCONTRADA);
@@ -90,7 +90,7 @@ const inactivar = async (req, res) => {
     const id = entero(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
 
-    res.json(await service.inactivarObligacion(id)); // { obligacion, eliminados }
+    res.json(await service.inactivarObligacion(id, req.usuario.id)); // { obligacion, eliminados }
   } catch (error) {
     responderError(res, error, 'Error al inactivar la obligación', NO_ENCONTRADA);
   }
@@ -102,7 +102,7 @@ const generarSiguienteAnio = async (req, res) => {
     const id = entero(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
 
-    res.json(await service.generarSiguienteAnio(id)); // { generados }
+    res.json(await service.generarSiguienteAnio(id, req.usuario.id)); // { generados }
   } catch (error) {
     responderError(res, error, 'Error al generar los vencimientos', NO_ENCONTRADA);
   }
@@ -139,7 +139,7 @@ const actualizar = async (req, res) => {
       return res.status(400).json({ error: 'No hay nada para actualizar (periodicidad, mesAnual u observaciones)' });
     }
 
-    res.json(await service.actualizarObligacion(id, datos)); // { obligacion, eliminados, generados }
+    res.json(await service.actualizarObligacion(id, datos, req.usuario.id)); // { obligacion, eliminados, generados }
   } catch (error) {
     responderError(res, error, 'Error al actualizar la obligación', NO_ENCONTRADA);
   }
@@ -161,7 +161,7 @@ const quitarFuturos = async (req, res) => {
       }
     }
 
-    res.json(await service.quitarVencimientosFuturos(id, anio)); // { eliminados }
+    res.json(await service.quitarVencimientosFuturos(id, anio, req.usuario.id)); // { eliminados }
   } catch (error) {
     responderError(res, error, 'Error al quitar los vencimientos', NO_ENCONTRADA);
   }

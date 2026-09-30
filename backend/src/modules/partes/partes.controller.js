@@ -21,7 +21,7 @@ async function crear(req, res) {
       });
     }
 
-    const parte = await partesService.crearParte(expedienteId, req.body);
+    const parte = await partesService.crearParte(expedienteId, req.body, req.usuario.id);
     res.status(201).json(parte);
   } catch (error) {
     // P2003 = foreign key inválida (expedienteId o clienteId no existen)
@@ -56,7 +56,7 @@ async function listar(req, res) {
 // ------------------------------------------
 async function actualizar(req, res) {
   try {
-    const parte = await partesService.actualizarParte(req.params.id, req.body);
+    const parte = await partesService.actualizarParte(req.params.id, req.body, req.usuario.id);
     res.json(parte);
   } catch (error) {
     if (error.code === 'P2025') {
@@ -76,7 +76,7 @@ async function actualizar(req, res) {
 // ------------------------------------------
 async function eliminar(req, res) {
   try {
-    await partesService.eliminarParte(req.params.id);
+    await partesService.eliminarParte(req.params.id, req.usuario.id);
     // 204 = No Content: se borró y no hay nada que devolver
     res.status(204).send();
   } catch (error) {

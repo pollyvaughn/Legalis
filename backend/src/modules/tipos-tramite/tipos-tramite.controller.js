@@ -73,7 +73,7 @@ const crear = async (req, res) => {
     const errorValidacion = validar(req.body, true);
     if (errorValidacion) return res.status(400).json({ error: errorValidacion });
 
-    res.status(201).json(await service.crearTipo(req.body));
+    res.status(201).json(await service.crearTipo(req.body, req.usuario.id));
   } catch (error) {
     responderError(res, error, 'Error al crear el trámite');
   }
@@ -88,7 +88,7 @@ const actualizar = async (req, res) => {
     const errorValidacion = validar(req.body, false);
     if (errorValidacion) return res.status(400).json({ error: errorValidacion });
 
-    res.json(await service.actualizarTipo(id, req.body));
+    res.json(await service.actualizarTipo(id, req.body, req.usuario.id));
   } catch (error) {
     responderError(res, error, 'Error al actualizar el trámite');
   }
@@ -100,7 +100,7 @@ const eliminar = async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
 
-    await service.eliminarTipo(id);
+    await service.eliminarTipo(id, req.usuario.id);
     res.json({ mensaje: 'Trámite eliminado del catálogo' });
   } catch (error) {
     responderError(res, error, 'Error al eliminar el trámite');

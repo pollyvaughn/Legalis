@@ -4,6 +4,7 @@
 // ============================================================
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // HELPER: true si el campo llegó en el body (aunque sea null).
 // Sirve para que un PUT parcial no pise campos que no se enviaron.
@@ -80,21 +81,38 @@ const obtenerTipoPorId = async (id) => {
 
 // ------------------------------------------------------------
 // CREAR ("catastrar" un trámite en el catálogo)
+// Ahora recibe usuarioId para la auditoría.
 // ------------------------------------------------------------
-const crearTipo = async (datos) => {
+const crearTipo = async (datos, usuarioId) => {
   const nombre = datos.nombre.trim();
   if (await existeNombre(nombre)) {
     throw new ErrorNegocio('Ya existe un trámite con ese nombre en el catálogo', 409);
   }
-  return prisma.tipoTramite.create({
-    data: { nombre, descripcion: limpiarTexto(datos.descripcion) },
+
+  return prisma.$transaction(async (tx) => {
+    const tipo = await tx.tipoTramite.create({
+      data: { nombre, descripcion: limpiarTexto(datos.descripcion) },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'TipoTramite',
+      entidadId: tipo.id,
+      detalle: tipo.nombre,
+    });
+
+    return tipo;
   });
 };
 
 // ------------------------------------------------------------
 // ACTUALIZAR (PUT parcial: nombre, descripcion y/o activo)
+// Ahora recibe usuarioId para la auditoría. Si vino "activo",
+// distingue INACTIVAR/REACTIVAR de una edición común, igual
+// que en clientes y expedientes.
 // ------------------------------------------------------------
-const actualizarTipo = async (id, datos) => {
+const actualizarTipo = async (id, datos, usuarioId) => {
   const data = {};
 
   if (siVino(datos, 'nombre')) {
@@ -123,13 +141,31 @@ const actualizarTipo = async (id, datos) => {
     data.activo = datos.activo;
   }
 
-  return prisma.tipoTramite.update({ where: { id }, data });
+  return prisma.$transaction(async (tx) => {
+    const tipoActualizado = await tx.tipoTramite.update({ where: { id }, data });
+
+    let accion = 'EDITAR';
+    if (data.activo === false) accion = 'INACTIVAR';
+    if (data.activo === true) accion = 'REACTIVAR';
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion,
+      entidad: 'TipoTramite',
+      entidadId: id,
+      detalle: tipoActualizado.nombre,
+    });
+
+    return tipoActualizado;
+  });
 };
 
 // ------------------------------------------------------------
 // ELIMINAR (solo si nunca se usó; si no, hay que inactivarlo)
+// Ahora recibe usuarioId para la auditoría. Se guarda el nombre
+// ANTES de borrar (después ya no se puede leer de la base).
 // ------------------------------------------------------------
-const eliminarTipo = async (id) => {
+const eliminarTipo = async (id, usuarioId) => {
   const [tramites, obligaciones] = await Promise.all([
     prisma.tramite.count({ where: { tipoTramiteId: id } }),
     prisma.obligacionPeriodica.count({ where: { tipoTramiteId: id } }),
@@ -140,7 +176,23 @@ const eliminarTipo = async (id) => {
       409
     );
   }
-  return prisma.tipoTramite.delete({ where: { id } });
+
+  // Se busca antes de borrar para tener el nombre a mano en la auditoría.
+  // Si no existe, findUniqueOrThrow lanza P2025 (mismo error que el
+  // delete directo lanzaría), así que el controller no cambia.
+  const tipo = await prisma.tipoTramite.findUniqueOrThrow({ where: { id } });
+
+  return prisma.$transaction(async (tx) => {
+    await tx.tipoTramite.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'TipoTramite',
+      entidadId: id,
+      detalle: tipo.nombre,
+    });
+  });
 };
 
 module.exports = {
