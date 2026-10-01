@@ -5,6 +5,7 @@
 // ============================================
 
 const clientesService = require('./clientes.service');
+const { generarListadoPdf } = require('../../utils/exportarListadoPdf');
 
 // ------------------------------------------
 // POST /api/clientes
@@ -118,10 +119,68 @@ async function actualizar(req, res) {
   }
 }
 
+// ------------------------------------------
+// GET /api/clientes/exportar
+// Exporta a PDF el listado de clientes CON los filtros aplicados
+// (mismos query params que el listado normal: estado, busqueda).
+// RNF 11.3: todos los listados deben poder exportarse/imprimirse.
+// ------------------------------------------
+async function exportar(req, res) {
+  try {
+    // Mismo filtro que "listar", pero sin paginar: traemos todo lo que matchea
+    const { datos } = await clientesService.listarClientes({
+      estado: req.query.estado,
+      busqueda: req.query.busqueda,
+      pagina: 1,
+      limite: 10000, // "todos": un estudio unipersonal no se acerca a este número
+    });
+
+    // Arma el texto de subtítulo según los filtros activos, para que
+    // quede claro en el PDF qué se está mostrando
+    const partesFiltro = [];
+    if (req.query.estado && req.query.estado !== 'todos') partesFiltro.push(`Estado: ${req.query.estado}`);
+    if (req.query.busqueda) partesFiltro.push(`Búsqueda: "${req.query.busqueda}"`);
+    const subtitulo = partesFiltro.length ? partesFiltro.join(' · ') : 'Todos los clientes';
+
+    const columnas = [
+      { encabezado: 'Nombre / Razón Social', ancho: 180 },
+      { encabezado: 'RUC', ancho: 100 },
+      { encabezado: 'Tipo', ancho: 70 },
+      { encabezado: 'Teléfono', ancho: 90 },
+      { encabezado: 'Email', ancho: 150 },
+      { encabezado: 'Estado', ancho: 60 },
+    ];
+
+    const filas = datos.map((c) => [
+      c.nombreRazonSocial,
+      c.ruc,
+      c.tipo === 'FISICA' ? 'Física' : 'Jurídica',
+      c.telefono,
+      c.email,
+      c.activo ? 'Activo' : 'Inactivo',
+    ]);
+
+    const buffer = await generarListadoPdf({
+      titulo: 'Listado de Clientes',
+      subtitulo,
+      columnas,
+      filas,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="clientes.pdf"');
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error al exportar clientes:', error);
+    res.status(500).json({ error: 'Error al generar el PDF' });
+  }
+}
+
 module.exports = {
   crear,
   listar,
   listarOpciones,
   obtenerPorId,
   actualizar,
+  exportar,
 };

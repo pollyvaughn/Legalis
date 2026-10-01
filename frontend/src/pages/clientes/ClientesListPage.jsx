@@ -63,6 +63,10 @@ function ClientesListPage() {
   const [busquedaInput, setBusquedaInput] = useState('');
   const [busqueda, setBusqueda] = useState('');
 
+  // Evita doble click mientras se genera el PDF (puede tardar un
+  // segundo si hay muchos clientes)
+  const [exportando, setExportando] = useState(false);
+
   // ------------------------------------------
   // DEBOUNCE de la búsqueda.
   // Cada tecla programa la actualización del valor "real" a 400 ms;
@@ -123,12 +127,52 @@ function ClientesListPage() {
   // activos e inactivos en la misma vista.
   const mostrarColumnaEstado = filtroEstado === 'todos';
 
+    // ------------------------------------------
+  // EXPORTAR A PDF
+  // Pide el PDF al backend con los MISMOS filtros que están
+  // aplicados en pantalla (estado + búsqueda), no toda la tabla
+  // sin filtrar. responseType: 'blob' le dice a axios que la
+  // respuesta es binaria, no JSON.
+  // ------------------------------------------
+  async function exportarPdf() {
+    setExportando(true);
+    try {
+      const respuesta = await api.get('/clientes/exportar', {
+        params: {
+          estado: filtroEstado,
+          busqueda: busqueda || undefined,
+        },
+        responseType: 'blob',
+      });
+
+      // Truco para forzar la descarga: crea un link invisible,
+      // le asigna el archivo como href, lo clickea solo y lo borra.
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'clientes.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url); // libera la memoria del blob
+    } catch (err) {
+      setError('No se pudo generar el PDF');
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
-      {/* --- Encabezado de la página: título + acción principal --- */}
+      {/* --- Encabezado de la página: título + acciones --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Clientes</h1>
-        {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo cliente</Button>}
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={exportarPdf} disabled={exportando}>
+            {exportando ? 'Generando...' : 'Exportar PDF'}
+          </Button>
+          {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo cliente</Button>}
+        </div>
       </div>
 
       {/* --- Filtro de estado: Activos / Inactivos / Todos --- */}

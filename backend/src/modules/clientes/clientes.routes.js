@@ -22,6 +22,7 @@ const soloAbogado = requiereRol('ABOGADO');
 router.post('/', soloAbogado, clientesController.crear);         // POST   /api/clientes
 router.get('/', clientesController.listar);                       // GET    /api/clientes
 router.get('/opciones', clientesController.listarOpciones);       // GET    /api/clientes/opciones  (antes de /:id)
+router.get('/exportar', clientesController.exportar); // GET /api/clientes/exportar
 router.get('/:id', clientesController.obtenerPorId);              // GET    /api/clientes/5
 router.put('/:id', soloAbogado, clientesController.actualizar);   // PUT    /api/clientes/5
 
