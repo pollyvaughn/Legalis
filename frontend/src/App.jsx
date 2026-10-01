@@ -24,6 +24,7 @@ import UsuariosPage from './pages/usuarios/UsuariosPage';
 import CalendarioPlazosPage from './pages/calendario/CalendarioPlazosPage';
 import CatalogoTiposPlazoPage from './pages/calendario/CatalogoTiposPlazoPage';
 import CatalogoDiasNoHabilesPage from './pages/calendario/CatalogoDiasNoHabilesPage';
+import AuditoriaPage from './pages/auditoria/AuditoriaPage';
 
 function App() {
   return (
@@ -211,6 +212,18 @@ function App() {
             <RutaProtegida soloAbogado>
               <AppLayout>
                 <UsuariosPage />
+              </AppLayout>
+            </RutaProtegida>
+          }
+        />
+
+        {/* --- Auditoría (solo ABOGADO) --- */}
+        <Route
+          path="/auditoria"
+          element={
+            <RutaProtegida soloAbogado>
+              <AppLayout>
+                <AuditoriaPage />
               </AppLayout>
             </RutaProtegida>
           }

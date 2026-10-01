@@ -18,6 +18,7 @@ import {
   DollarSign,
   CreditCard,
   ShieldCheck,
+  History,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -35,7 +36,7 @@ const NAV_ITEMS = [
   { label: "Cobros & Facturación", to: "/cobros", icon: CreditCard, disponible: false },
   // Administración de cuentas: solo la abogada (rol ABOGADO)
   { label: "Gestión de usuarios", to: "/usuarios", icon: ShieldCheck, disponible: true, soloAbogado: true },
-];
+  { label: "Auditoría", to: "/auditoria", icon: History, disponible: true, soloAbogado: true },];
 
 // Genera las iniciales a partir del nombre completo, ej: "Martín Romero" -> "MR"
 function iniciales(nombre) {

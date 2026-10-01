@@ -126,5 +126,6 @@ app.use(
 
 app.use('/api/tipos-plazo', protegido, require('./modules/tipos-plazo/tipos-plazo.routes'));
 app.use('/api/dias-no-habiles', protegido, require('./modules/dias-no-habiles/dia-no-habil.routes'));
+app.use('/api/auditoria', protegido, require('./modules/auditoria/auditoria.routes'));
 
 module.exports = app;
