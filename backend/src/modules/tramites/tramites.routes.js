@@ -12,7 +12,8 @@ const { requiereRol } = require('../../middlewares/auth.middleware');
 // Atajo: middleware que deja pasar únicamente al rol ABOGADO
 const soloAbogado = requiereRol('ABOGADO');
 
-router.get('/', controller.listar);                       // GET    /api/tramites (filtros, ver controller)
+router.get('/', controller.listar);   
+router.get('/exportar', controller.exportar);                    // GET    /api/tramites (filtros, ver controller)
 router.get('/:id', controller.obtener);                   // GET    /api/tramites/5
 router.post('/', soloAbogado, controller.crear);          // POST   /api/tramites (trámite único)
 router.put('/:id', soloAbogado, controller.actualizar);   // PUT    /api/tramites/5 (fecha, estado, descripción)

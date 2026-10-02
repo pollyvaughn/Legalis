@@ -5,6 +5,7 @@
 const service = require('./tramites.service');
 const { responderError } = require('../../utils/errores');
 const { siVino, entero, parsearFecha } = require('../../utils/entrada');
+const { generarListadoPdf } = require('../../utils/exportarListadoPdf');
 
 // Valores permitidos (espejo de EstadoTramite en schema.prisma)
 const ESTADOS = ['PENDIENTE', 'EN_PROCESO', 'PRESENTADO', 'FINALIZADO'];
@@ -82,7 +83,7 @@ const crear = async (req, res) => {
     if (!fechaVencimiento) return res.status(400).json({ error: 'La fecha de vencimiento es obligatoria (formato AAAA-MM-DD)' });
     if (descripcion && descripcion.length > 300) return res.status(400).json({ error: 'La descripción no puede superar 300 caracteres' });
 
-    res.status(201).json(await service.crearTramite({ clienteId, tipoTramiteId, fechaVencimiento, descripcion }));
+    res.status(201).json(await service.crearTramite({ clienteId, tipoTramiteId, fechaVencimiento, descripcion }, req.usuario.id));
   } catch (error) {
     responderError(res, error, 'Error al crear el trámite', NO_ENCONTRADO);
   }
@@ -115,7 +116,7 @@ const actualizar = async (req, res) => {
       return res.status(400).json({ error: 'No hay nada para actualizar (fechaVencimiento, estado o descripcion)' });
     }
 
-    res.json(await service.actualizarTramite(id, datos));
+    res.json(await service.actualizarTramite(id, datos, req.usuario.id));
   } catch (error) {
     responderError(res, error, 'Error al actualizar el trámite', NO_ENCONTRADO);
   }
@@ -127,11 +128,87 @@ const eliminar = async (req, res) => {
     const id = entero(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
 
-    await service.eliminarTramite(id);
+    await service.eliminarTramite(id, req.usuario.id);
     res.json({ mensaje: 'Trámite eliminado' });
   } catch (error) {
     responderError(res, error, 'Error al eliminar el trámite', NO_ENCONTRADO);
   }
 };
 
-module.exports = { listar, obtener, crear, actualizar, eliminar };
+// ------------------------------------------
+// GET /api/tramites/exportar
+// Exporta a PDF el listado de vencimientos CON los filtros aplicados
+// (mismos query params que "listar": estado, cliente, tipo, fechas, búsqueda).
+// ------------------------------------------
+const exportar = async (req, res) => {
+  try {
+    const { estado = 'abiertos', busqueda } = req.query;
+    if (!['abiertos', 'todos', ...ESTADOS].includes(estado)) {
+      return res.status(400).json({ error: 'estado inválido' });
+    }
+
+    let desde;
+    let hasta;
+    if (req.query.desde) {
+      desde = parsearFecha(req.query.desde);
+      if (!desde) return res.status(400).json({ error: 'La fecha "desde" es inválida' });
+    }
+    if (req.query.hasta) {
+      hasta = parsearFecha(req.query.hasta);
+      if (!hasta) return res.status(400).json({ error: 'La fecha "hasta" es inválida' });
+    }
+
+    const clienteId = entero(req.query.clienteId);
+    const tipoTramiteId = entero(req.query.tipoTramiteId);
+
+    const { datos } = await service.listarTramites({
+      clienteId: Number.isInteger(clienteId) ? clienteId : undefined,
+      tipoTramiteId: Number.isInteger(tipoTramiteId) ? tipoTramiteId : undefined,
+      estado,
+      desde,
+      hasta,
+      busqueda,
+      pagina: 1,
+      limite: 10000,
+    });
+
+    // Subtítulo con los filtros activos
+    const partesFiltro = [];
+    partesFiltro.push(`Estado: ${estado}`); // siempre se muestra, incluso el default "abiertos"
+    if (desde) partesFiltro.push(`Desde: ${req.query.desde}`);
+    if (hasta) partesFiltro.push(`Hasta: ${req.query.hasta}`);
+    if (busqueda) partesFiltro.push(`Búsqueda: "${busqueda}"`);
+    const subtitulo = partesFiltro.join(' · ');
+
+    const columnas = [
+      { encabezado: 'Vencimiento', ancho: 80 },
+      { encabezado: 'Cliente', ancho: 170 },
+      { encabezado: 'Trámite', ancho: 150 },
+      { encabezado: 'Tipo', ancho: 70 },
+      { encabezado: 'Estado', ancho: 80 },
+    ];
+
+    const filas = datos.map((t) => [
+      new Date(t.fechaVencimiento).toLocaleDateString('es-PY'),
+      t.cliente.nombreRazonSocial,
+      t.tipoTramite.nombre,
+      t.obligacionId ? 'Periódico' : 'Único',
+      t.estado,
+    ]);
+
+    const buffer = await generarListadoPdf({
+      titulo: 'Listado de Vencimientos',
+      subtitulo,
+      columnas,
+      filas,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="vencimientos.pdf"');
+    res.send(buffer);
+  } catch (error) {
+    responderError(res, error, 'Error al generar el PDF', NO_ENCONTRADO);
+  }
+};
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, exportar, };

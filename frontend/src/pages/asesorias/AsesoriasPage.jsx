@@ -96,6 +96,7 @@ function AsesoriasPage() {
   // Cambiar este número "reinicia" la pestaña de obligaciones (la fuerza a recargar)
   const [versionObligaciones, setVersionObligaciones] = useState(0);
 
+  const [exportando, setExportando] = useState(false);
   // ------------------------------------------
   // DEBOUNCE de la búsqueda (vuelve a página 1 al aplicarse)
   // ------------------------------------------
@@ -187,6 +188,39 @@ function AsesoriasPage() {
 
   const hayFiltros = busqueda || filtroCliente || filtroTipo || filtroEstado !== 'abiertos';
 
+    // ------------------------------------------
+  // EXPORTAR A PDF
+  // Mismo patrón que clientes/expedientes: todos los filtros
+  // actuales de la pestaña Vencimientos.
+  // ------------------------------------------
+  async function exportarPdf() {
+    setExportando(true);
+    try {
+      const respuesta = await api.get('/tramites/exportar', {
+        params: {
+          estado: filtroEstado,
+          clienteId: filtroCliente || undefined,
+          tipoTramiteId: filtroTipo || undefined,
+          busqueda: busqueda || undefined,
+        },
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'vencimientos.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('No se pudo generar el PDF');
+    } finally {
+      setExportando(false);
+    }
+  }
+
   // =====================================================
   // RENDER (el return va SIEMPRE al final del componente)
   // =====================================================
@@ -196,7 +230,11 @@ function AsesoriasPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Asesorías &amp; Trámites</h1>
         <div className="flex gap-2">
-          {/* El catálogo lo puede VER cualquiera (solo lectura); el alta es solo de la abogada */}
+          {pestana === 'vencimientos' && (
+            <Button variant="secondary" onClick={exportarPdf} disabled={exportando}>
+              {exportando ? 'Generando...' : 'Exportar PDF'}
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => navigate('/asesorias/catalogo')}>
             Catálogo de trámites
           </Button>

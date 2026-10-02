@@ -7,6 +7,8 @@
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
 const { siVino, limpiarTexto } = require('../../utils/entrada');
+// Agregar arriba, junto a los otros requires:
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // "Abiertos" = los que todavía requieren acción
 const ESTADOS_ABIERTOS = ['PENDIENTE', 'EN_PROCESO'];
@@ -94,7 +96,7 @@ const obtenerTramite = async (id) => {
 // Se permite una fecha pasada: sirve para cargar algo ya vencido
 // que sigue pendiente.
 // ------------------------------------------------------------
-const crearTramite = async ({ clienteId, tipoTramiteId, fechaVencimiento, descripcion }) => {
+const crearTramite = async ({ clienteId, tipoTramiteId, fechaVencimiento, descripcion }, usuarioId) => {
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
     select: { id: true, activo: true },
@@ -106,9 +108,21 @@ const crearTramite = async ({ clienteId, tipoTramiteId, fechaVencimiento, descri
   if (!tipo) throw new ErrorNegocio('Trámite no encontrado en el catálogo', 404);
   if (!tipo.activo) throw new ErrorNegocio('El trámite del catálogo está inactivo', 409);
 
-  return prisma.tramite.create({
-    data: { clienteId, tipoTramiteId, fechaVencimiento, descripcion: limpiarTexto(descripcion) },
-    include: INCLUIR_LISTA,
+  return prisma.$transaction(async (tx) => {
+    const tramite = await tx.tramite.create({
+      data: { clienteId, tipoTramiteId, fechaVencimiento, descripcion: limpiarTexto(descripcion) },
+      include: INCLUIR_LISTA,
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'Tramite',
+      entidadId: tramite.id,
+      detalle: descripcionTramite(tramite),
+    });
+
+    return tramite;
   });
 };
 
@@ -119,24 +133,39 @@ const crearTramite = async ({ clienteId, tipoTramiteId, fechaVencimiento, descri
 //    ajustar feriados; "periodo" no cambia (sigue siendo su etiqueta).
 //  - El estado puede pasar de cualquiera a cualquiera (por si hubo un error).
 // ------------------------------------------------------------
-const actualizarTramite = async (id, datos) => {
+const actualizarTramite = async (id, datos, usuarioId) => {
   const data = {};
   if (siVino(datos, 'fechaVencimiento')) data.fechaVencimiento = datos.fechaVencimiento;
   if (siVino(datos, 'descripcion')) data.descripcion = limpiarTexto(datos.descripcion);
   if (siVino(datos, 'estado')) data.estado = datos.estado;
 
-  return prisma.tramite.update({ where: { id }, data, include: INCLUIR_LISTA });
+  return prisma.$transaction(async (tx) => {
+    const tramite = await tx.tramite.update({ where: { id }, data, include: INCLUIR_LISTA });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'Tramite',
+      entidadId: id,
+      detalle: descripcionTramite(tramite),
+    });
+
+    return tramite;
+  });
 };
 
 // ------------------------------------------------------------
 // ELIMINAR (solo trámites únicos y sin documentos registrados)
 // Los generados por una obligación no se borran uno por uno: si ya
 // no aplican, se inactiva la obligación (o se marcan como finalizados).
+// Ahora recibe usuarioId para la auditoría. El tramite ya se busca
+// antes de borrar (para las validaciones), así que se reutiliza
+// para el detalle en vez de otra consulta.
 // ------------------------------------------------------------
-const eliminarTramite = async (id) => {
+const eliminarTramite = async (id, usuarioId) => {
   const tramite = await prisma.tramite.findUnique({
     where: { id },
-    include: { _count: { select: { documentos: true } } },
+    include: { ...INCLUIR_LISTA, _count: { select: { documentos: true } } },
   });
   if (!tramite) throw new ErrorNegocio('Trámite no encontrado', 404);
 
@@ -150,8 +179,24 @@ const eliminarTramite = async (id) => {
     throw new ErrorNegocio('El trámite tiene documentos registrados; no se puede eliminar.', 409);
   }
 
-  return prisma.tramite.delete({ where: { id } });
+  return prisma.$transaction(async (tx) => {
+    await tx.tramite.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'Tramite',
+      entidadId: id,
+      detalle: descripcionTramite(tramite),
+    });
+  });
 };
+
+// ------------------------------------------------------------
+// HELPER: descripción corta para auditoría
+// ------------------------------------------------------------
+const descripcionTramite = (tramite) =>
+  `${tramite.tipoTramite?.nombre ?? 'Trámite'} de ${tramite.cliente?.nombreRazonSocial ?? '—'} (vto. ${new Date(tramite.fechaVencimiento).toLocaleDateString('es-PY')})`;
 
 module.exports = {
   listarTramites,

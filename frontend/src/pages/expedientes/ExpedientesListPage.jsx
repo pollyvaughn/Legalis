@@ -76,6 +76,7 @@ function ExpedientesListPage() {
   const [juzgadoInput, setJuzgadoInput] = useState('');
   const [juzgado, setJuzgado] = useState('');
 
+  const [exportando, setExportando] = useState(false);
   // ------------------------------------------
   // DEBOUNCE de búsqueda y juzgado.
   // Cada vez que el usuario tipea, se programa la actualización del
@@ -147,12 +148,52 @@ function ExpedientesListPage() {
   // se mezclan activos e inactivos en la misma vista.
   const mostrarColumnaEstado = filtroEstado === 'todos';
 
+    // ------------------------------------------
+  // EXPORTAR A PDF
+  // Mismo patrón que ClientesListPage: pide el PDF con TODOS los
+  // filtros actuales de la pantalla, descarga el archivo vía blob.
+  // ------------------------------------------
+  async function exportarPdf() {
+    setExportando(true);
+    try {
+      const respuesta = await api.get('/expedientes/exportar', {
+        params: {
+          estado: filtroEstado,
+          fuero: filtroFuero || undefined,
+          estadoProcesal: filtroEstadoProcesal || undefined,
+          anio: filtroAnio || undefined,
+          juzgado: juzgado || undefined,
+          busqueda: busqueda || undefined,
+        },
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([respuesta.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'expedientes.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('No se pudo generar el PDF');
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
-      {/* --- Encabezado de la página: título + acción principal --- */}
+      {/* --- Encabezado de la página: título + acciones --- */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Expedientes</h1>
-        {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo expediente</Button>}
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={exportarPdf} disabled={exportando}>
+            {exportando ? 'Generando...' : 'Exportar PDF'}
+          </Button>
+          {esAbogado && <Button onClick={() => setMostrarModal(true)}>+ Nuevo expediente</Button>}
+        </div>
       </div>
 
       {/* --- Filtro de estado: Activos / Inactivos / Todos --- */}

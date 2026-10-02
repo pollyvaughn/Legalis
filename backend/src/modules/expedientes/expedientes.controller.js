@@ -6,6 +6,7 @@
 
 const expedientesService = require('./expedientes.service');
 const { ErrorNegocio } = require('../../utils/errores');
+const { generarListadoPdf } = require('../../utils/exportarListadoPdf');
 
 // Mensaje único para duplicados: se reutiliza en crear y actualizar
 // para que la regla de negocio se lea igual en ambos lados.
@@ -137,9 +138,72 @@ async function actualizar(req, res) {
   }
 }
 
+// ------------------------------------------
+// GET /api/expedientes/exportar
+// Exporta a PDF el listado de expedientes CON los filtros aplicados
+// (mismos query params que el listado normal).
+// ------------------------------------------
+async function exportar(req, res) {
+  try {
+    const { datos } = await expedientesService.listarExpedientes({
+      clienteId: req.query.clienteId,
+      estado: req.query.estado,
+      fuero: req.query.fuero,
+      estadoProcesal: req.query.estadoProcesal,
+      anio: req.query.anio,
+      juzgado: req.query.juzgado,
+      busqueda: req.query.busqueda,
+      pagina: 1,
+      limite: 10000,
+    });
+
+    // Arma el subtítulo con los filtros activos, para que el PDF
+    // deje constancia de qué se está mostrando (igual que en clientes)
+    const partesFiltro = [];
+    if (req.query.estado && req.query.estado !== 'todos') partesFiltro.push(`Estado: ${req.query.estado}`);
+    if (req.query.fuero) partesFiltro.push(`Fuero: ${req.query.fuero}`);
+    if (req.query.estadoProcesal) partesFiltro.push(`Estado procesal: ${req.query.estadoProcesal}`);
+    if (req.query.anio) partesFiltro.push(`Año: ${req.query.anio}`);
+    if (req.query.juzgado) partesFiltro.push(`Juzgado: "${req.query.juzgado}"`);
+    if (req.query.busqueda) partesFiltro.push(`Búsqueda: "${req.query.busqueda}"`);
+    const subtitulo = partesFiltro.length ? partesFiltro.join(' · ') : 'Todos los expedientes';
+
+    const columnas = [
+      { encabezado: 'N° / Año', ancho: 70 },
+      { encabezado: 'Carátula', ancho: 180 },
+      { encabezado: 'Cliente', ancho: 150 },
+      { encabezado: 'Juzgado', ancho: 110 },
+      { encabezado: 'Estado procesal', ancho: 90 },
+    ];
+
+    const filas = datos.map((e) => [
+      `${e.numeroExpediente}/${e.anio}`,
+      e.caratula,
+      e.cliente?.nombreRazonSocial,
+      e.juzgado,
+      e.estadoProcesal,
+    ]);
+
+    const buffer = await generarListadoPdf({
+      titulo: 'Listado de Expedientes',
+      subtitulo,
+      columnas,
+      filas,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="expedientes.pdf"');
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error al exportar expedientes:', error);
+    res.status(500).json({ error: 'Error al generar el PDF' });
+  }
+}
+
 module.exports = {
   crear,
   listar,
   obtenerPorId,
   actualizar,
+  exportar,
 };
