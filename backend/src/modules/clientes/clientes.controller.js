@@ -6,6 +6,7 @@
 
 const clientesService = require('./clientes.service');
 const { generarListadoPdf } = require('../../utils/exportarListadoPdf');
+const { ErrorNegocio } = require('../../utils/errores');
 
 // ------------------------------------------
 // POST /api/clientes
@@ -15,7 +16,6 @@ async function crear(req, res) {
   try {
     const { ruc, tipo, nombreRazonSocial } = req.body;
 
-    // Validación mínima de campos obligatorios
     if (!ruc || !tipo || !nombreRazonSocial) {
       return res.status(400).json({
         error: 'Faltan campos obligatorios: ruc, tipo, nombreRazonSocial',
@@ -23,9 +23,12 @@ async function crear(req, res) {
     }
 
     const cliente = await clientesService.crearCliente(req.body, req.usuario.id);
-    res.status(201).json(cliente); // 201 = Created
+    res.status(201).json(cliente);
   } catch (error) {
-    // P2002 es el código de Prisma para violación de constraint "unique" (ej. ruc duplicado)
+    // NUEVO: errores de negocio (RUC con formato inválido, tipo inválido)
+    if (error instanceof ErrorNegocio) {
+      return res.status(error.status).json({ error: error.message });
+    }
     if (error.code === 'P2002') {
       return res.status(409).json({ error: 'Ya existe un cliente con ese RUC/documento' });
     }

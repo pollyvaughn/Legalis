@@ -6,6 +6,8 @@
 
 const prisma = require('../../config/database');
 const { registrarAuditoria } = require('../../utils/auditoria');
+const { terminacionRuc } = require('../../utils/calendarioRuc');
+const { ErrorNegocio } = require('../../utils/errores');
 
 // ------------------------------------------
 // HELPER: siVino
@@ -21,6 +23,9 @@ function siVino(valor) {
 // CREAR CLIENTE
 // (mismo comportamiento de antes) + registra auditoría CREAR.
 // Ahora recibe usuarioId como 2do parámetro para saber quién lo hizo.
+// Valida el formato del RUC ANTES de escribir nada: si la obligación
+// periódica lo iba a rechazar más tarde (ver obligaciones.service.js),
+// mejor avisar ahora, al cargar el cliente.
 // ------------------------------------------
 async function crearCliente(datos, usuarioId) {
   const {
@@ -31,17 +36,19 @@ async function crearCliente(datos, usuarioId) {
     email,
     telefono,
     direccion,
-    // Campos específicos de persona física
     cedula,
     digitoVerificador,
     fechaNacimiento,
-    // Campos específicos de persona jurídica
     tipoSocietario,
     fechaConstitucion,
     representanteLegal,
   } = datos;
 
-  // Arma el objeto base común a ambos tipos
+  // terminacionRuc lanza ErrorNegocio si el formato no es "dígitos-dígito"
+  // (ej: "80012345-6"). No usamos el valor que devuelve acá, solo
+  // aprovechamos que valida el formato.
+  terminacionRuc(ruc);
+
   const dataCliente = {
     ruc,
     tipo,
@@ -52,13 +59,10 @@ async function crearCliente(datos, usuarioId) {
     direccion,
   };
 
-  // Agrega la extensión correspondiente según el tipo de cliente
   if (tipo === 'FISICA') {
     dataCliente.personaFisica = {
       create: {
         cedula,
-        // digitoVerificador es Int en el schema; si viene de un
-        // input HTML llega como string, así que lo convertimos.
         digitoVerificador: digitoVerificador !== undefined && digitoVerificador !== null
           ? Number(digitoVerificador)
           : undefined,
@@ -73,13 +77,15 @@ async function crearCliente(datos, usuarioId) {
         representanteLegal,
       },
     };
+  } else {
+    // Punto 2 del backlog: tipo no es FISICA ni JURIDICA.
+    // Sin esto, Prisma crearía un Cliente sin ninguna extensión.
+    throw new ErrorNegocio('El tipo de cliente debe ser FISICA o JURIDICA', 400);
   }
 
-  // Transacción: crear cliente + registrar auditoría, todo o nada
   return prisma.$transaction(async (tx) => {
     const cliente = await tx.cliente.create({
       data: dataCliente,
-      // "include" trae también los datos de la extensión en la respuesta
       include: {
         personaFisica: true,
         personaJuridica: true,

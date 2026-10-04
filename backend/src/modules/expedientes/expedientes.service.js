@@ -56,6 +56,11 @@ async function crearExpediente(datos, usuarioId) {
     estadoProcesal,
   } = datos;
 
+  // NUEVO: unidadFiscal solo tiene sentido en fuero Penal (RF2)
+  if (unidadFiscal && fuero !== 'PENAL') {
+    throw new ErrorNegocio('La unidad fiscal solo aplica al fuero Penal', 400);
+  }
+
   // Regla del checklist 1.1: un cliente inactivo no puede recibir expedientes nuevos.
   // Se valida FUERA de la transacción: es una lectura previa, no una escritura,
   // así que no hace falta que forme parte de la atomicidad de abajo.
@@ -207,7 +212,6 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
 // INACTIVAR/REACTIVAR de una EDITAR común.
 // ------------------------------------------
 async function actualizarExpediente(id, datos, usuarioId) {
-  console.log('DEBUG actualizarExpediente ->', { id, usuarioId }); // TEMPORAL, borrar después
   const {
     numeroExpediente,
     anio,
