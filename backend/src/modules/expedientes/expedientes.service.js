@@ -229,6 +229,18 @@ async function actualizarExpediente(id, datos, usuarioId) {
 
   const expedienteId = Number(id);
 
+  // NUEVO: valida unidadFiscal contra el fuero final (el que viene en
+  if (unidadFiscal !== undefined && unidadFiscal !== null) {
+    const fueroFinal = fuero ?? (await prisma.expediente.findUnique({
+      where: { id: expedienteId },
+      select: { fuero: true },
+    }))?.fuero;
+
+    if (fueroFinal !== 'PENAL') {
+      throw new ErrorNegocio('La unidad fiscal solo aplica al fuero Penal', 400);
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const expedienteActualizado = await tx.expediente.update({
       where: { id: expedienteId },

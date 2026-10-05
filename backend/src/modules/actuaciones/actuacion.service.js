@@ -1,5 +1,5 @@
 // ============================================================
-// SERVICE: Actuacion
+// ACTUACION.SERVICE.JS:
 // Capa de acceso a datos + reglas de negocio del Módulo 2 (RF5).
 // No conoce Express (req/res): recibe datos ya validados desde
 // el controller y devuelve objetos planos o lanza errores con
