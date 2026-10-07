@@ -183,11 +183,11 @@ async function listarExpedientes(opciones = {}) {
 // ------------------------------------------
 async function obtenerExpedientePorId(id, incluirInactivos = false) {
   const where = { id: Number(id) };
-
+ 
   if (!incluirInactivos) {
     where.activo = true;
   }
-
+ 
   return prisma.expediente.findUnique({
     where,
     include: {
@@ -200,6 +200,12 @@ async function obtenerExpedientePorId(id, incluirInactivos = false) {
       },
       documentosRecibidos: {
         orderBy: [{ fechaRecepcion: 'desc' }, { id: 'desc' }],
+      },
+      actuaciones: {
+        include: {
+          parteProcesal: { select: { id: true, nombre: true, rol: true } },
+        },
+        orderBy: { fecha: 'desc' },
       },
     },
   });

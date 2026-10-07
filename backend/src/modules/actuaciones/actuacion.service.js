@@ -1,13 +1,26 @@
 // ============================================================
-// ACTUACION.SERVICE.JS:
+// ACTUACION.SERVICE.JS
 // Capa de acceso a datos + reglas de negocio del Módulo 2 (RF5).
 // No conoce Express (req/res): recibe datos ya validados desde
 // el controller y devuelve objetos planos o lanza errores con
 // un campo .status para que el manejador global de errores
 // responda con el código HTTP correcto.
+//
+// REGLA DE ELIMINACIÓN/EDICIÓN CON PLAZOS ASOCIADOS (acordada con
+// Yael el 05/10/2026, reemplaza el bloqueo total anterior):
+//   - Eliminar: si TODOS los plazos de la actuación están
+//     PENDIENTE, se permite, mostrando antes el impacto (cuáles se
+//     borran en cascada). Si HAY alguno CUMPLIDO, se bloquea
+//     entero (un plazo cumplido es un hecho histórico).
+//   - Editar fecha/fechaNotificacion: igual criterio. Si todos los
+//     plazos asociados están PENDIENTE, se permite el cambio Y se
+//     recalcula fechaVencimiento de cada uno (mismo cálculo que
+//     calcularSugerencia). Si hay alguno CUMPLIDO, se bloquea.
 // ============================================================
 
 const prisma = require('../../config/database');
+const { calcularFechaVencimiento } = require('../../utils/calendarioPlazos');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------------------------
 // Helper: valida que una fecha no sea posterior a hoy.
@@ -28,11 +41,22 @@ function validarFechaNoFutura(fecha, nombreCampo) {
 }
 
 // ------------------------------------------------------------
+// Helper interno: trae los DiaNoHabil vigentes para el cálculo,
+// igual criterio que calcularSugerencia en plazo.service.js
+// (solo se usa si modalidad === 'HABILES').
+// ------------------------------------------------------------
+async function obtenerDiasNoHabiles(tx) {
+  return tx.diaNoHabil.findMany({
+    select: { fechaDesde: true, fechaHasta: true },
+  });
+}
+
+// ------------------------------------------------------------
 // Crear actuación
 // Requiere: expedienteId, tipo, fecha, descripcion.
 // Opcionales: parteProcesalId, fechaNotificacion.
 // ------------------------------------------------------------
-async function crearActuacion(datos) {
+async function crearActuacion(datos, usuarioId) {
   const { expedienteId, parteProcesalId, tipo, fecha, descripcion, fechaNotificacion } = datos;
 
   // Validación de fecha: una actuación registra un hecho ya ocurrido.
@@ -70,15 +94,27 @@ async function crearActuacion(datos) {
     }
   }
 
-  return prisma.actuacion.create({
-    data: {
-      expedienteId,
-      parteProcesalId: parteProcesalId ?? null,
-      tipo,
-      fecha: new Date(fecha),
-      descripcion,
-      fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : null,
-    },
+  return prisma.$transaction(async (tx) => {
+    const actuacion = await tx.actuacion.create({
+      data: {
+        expedienteId,
+        parteProcesalId: parteProcesalId ?? null,
+        tipo,
+        fecha: new Date(fecha),
+        descripcion,
+        fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : null,
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'Actuacion',
+      entidadId: actuacion.id,
+      detalle: `Actuación ${tipo} registrada en expediente ${expedienteId}`,
+    });
+
+    return actuacion;
   });
 }
 
@@ -117,41 +153,82 @@ async function obtenerPorId(id) {
 }
 
 // ------------------------------------------------------------
-// Editar actuación
-// Si esta actuación ya generó uno o más PlazoJudicial, se
-// bloquea el cambio de 'fecha' y 'fechaNotificacion' (tocarlas
-// desincronizaría el vencimiento ya calculado a partir de ellas).
-// El resto de los campos (tipo, descripcion, parteProcesalId)
-// se puede seguir editando libremente.
+// Helper interno: trae los plazos asociados a una actuación, con
+// los campos que hacen falta para decidir impacto y recalcular.
 // ------------------------------------------------------------
-async function actualizarActuacion(id, datos) {
+async function obtenerPlazosDeActuacion(actuacionId, client = prisma) {
+  return client.plazoJudicial.findMany({
+    where: { actuacionId },
+    include: { tipoPlazo: { select: { nombre: true } } },
+  });
+}
+
+// ------------------------------------------------------------
+// Helper interno: separa los plazos en pendientes/cumplidos y
+// arma el motivo de bloqueo si corresponde. Se reutiliza tanto
+// para eliminar como para editar fecha/fechaNotificacion, porque
+// ambas operaciones comparten el mismo criterio (bloquear solo si
+// hay algún CUMPLIDO).
+// ------------------------------------------------------------
+function separarPorEstado(plazos) {
+  const pendientes = plazos.filter((p) => p.estado === 'PENDIENTE');
+  const cumplidos = plazos.filter((p) => p.estado === 'CUMPLIDO');
+  return { pendientes, cumplidos };
+}
+
+// ------------------------------------------------------------
+// IMPACTO DE ELIMINACIÓN (nuevo, RN pendiente de numerar)
+// Endpoint de consulta previo al DELETE: le dice al frontend si
+// la eliminación es posible y, si lo es, qué plazos se van a
+// borrar en cascada — para armar el mensaje de confirmación con
+// la abogada ANTES de ejecutar nada. No modifica datos.
+// ------------------------------------------------------------
+async function obtenerImpactoEliminacion(id) {
+  await obtenerPorId(id); // valida existencia (404 si no está)
+
+  const plazos = await obtenerPlazosDeActuacion(id);
+  const { pendientes, cumplidos } = separarPorEstado(plazos);
+
+  if (cumplidos.length > 0) {
+    return {
+      puedeEliminar: false,
+      motivo:
+        'Esta actuación tiene al menos un plazo ya marcado como cumplido, que es un hecho histórico. No se puede eliminar.',
+      plazosPendientes: [],
+      plazosCumplidos: cumplidos.map((p) => ({ id: p.id, tipoPlazo: p.tipoPlazo?.nombre })),
+    };
+  }
+
+  return {
+    puedeEliminar: true,
+    motivo: null,
+    plazosPendientes: pendientes.map((p) => ({ id: p.id, tipoPlazo: p.tipoPlazo?.nombre })),
+    plazosCumplidos: [],
+  };
+}
+
+// ------------------------------------------------------------
+// Editar actuación
+// Si cambia fecha o fechaNotificacion y hay plazos asociados:
+//   - si hay algún CUMPLIDO, se bloquea el cambio por completo.
+//   - si todos están PENDIENTE, se permite y se recalcula
+//     fechaVencimiento de cada uno (mismo criterio que
+//     calcularSugerencia en plazo.service.js).
+// El resto de los campos (tipo, descripcion, parteProcesalId) se
+// puede seguir editando libremente, sin tocar ningún plazo.
+// ------------------------------------------------------------
+async function actualizarActuacion(id, datos, usuarioId) {
   const actuacionExistente = await obtenerPorId(id); // valida existencia (tira 404 si no está)
 
   const { parteProcesalId, tipo, fecha, descripcion, fechaNotificacion } = datos;
 
-  // Si se intenta cambiar fecha o fechaNotificacion, verificar
-  // primero que no haya un plazo ya generado desde esta actuación.
   const intentaCambiarFechas =
     (fecha && new Date(fecha).getTime() !== new Date(actuacionExistente.fecha).getTime()) ||
     (fechaNotificacion &&
       new Date(fechaNotificacion).getTime() !==
         new Date(actuacionExistente.fechaNotificacion ?? 0).getTime());
 
-  if (intentaCambiarFechas) {
-    const cantidadPlazos = await prisma.plazoJudicial.count({
-      where: { actuacionId: id },
-    });
-    if (cantidadPlazos > 0) {
-      const error = new Error(
-        'Esta actuación ya generó un plazo judicial: no se puede modificar su fecha ni fecha de notificación.'
-      );
-      error.status = 400;
-      throw error;
-    }
-  }
-
-  // Misma validación que en la creación, solo si se está enviando
-  // una fecha nueva (en edición parcial puede no venir).
+  // Misma validación de siempre, solo si se está enviando una fecha nueva.
   if (fecha) {
     validarFechaNoFutura(fecha, 'La fecha de la actuación');
   }
@@ -172,15 +249,107 @@ async function actualizarActuacion(id, datos) {
     }
   }
 
-  return prisma.actuacion.update({
-    where: { id },
-    data: {
-      parteProcesalId: parteProcesalId ?? null,
-      tipo,
-      fecha: fecha ? new Date(fecha) : undefined,
-      descripcion,
-      fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : null,
-    },
+  // Caso simple: no toca fechas (o no hay plazos asociados todavía) →
+  // UPDATE directo, sin transacción especial ni recálculo.
+  if (!intentaCambiarFechas) {
+    return prisma.$transaction(async (tx) => {
+      const actuacion = await tx.actuacion.update({
+        where: { id },
+        data: {
+          parteProcesalId: parteProcesalId ?? null,
+          tipo,
+          descripcion,
+        },
+      });
+
+      await registrarAuditoria(tx, {
+        usuarioId,
+        accion: 'EDITAR',
+        entidad: 'Actuacion',
+        entidadId: id,
+        detalle: `Actuación ${id} editada (sin cambio de fechas)`,
+      });
+
+      return actuacion;
+    });
+  }
+
+  // Caso con cambio de fecha: hay que revisar los plazos asociados.
+  const plazos = await obtenerPlazosDeActuacion(id);
+  const { pendientes, cumplidos } = separarPorEstado(plazos);
+
+  if (cumplidos.length > 0) {
+    const error = new Error(
+      'Esta actuación tiene un plazo ya cumplido: no se puede modificar su fecha ni fecha de notificación.'
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  const nuevaFechaNotificacion = fechaNotificacion
+    ? new Date(fechaNotificacion)
+    : actuacionExistente.fechaNotificacion;
+
+  return prisma.$transaction(async (tx) => {
+    const actuacion = await tx.actuacion.update({
+      where: { id },
+      data: {
+        parteProcesalId: parteProcesalId ?? null,
+        tipo,
+        fecha: fecha ? new Date(fecha) : undefined,
+        descripcion,
+        fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : null,
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'Actuacion',
+      entidadId: id,
+      detalle: `Actuación ${id} editada (fecha/notificación modificada)`,
+    });
+
+    // Recalcula cada plazo PENDIENTE asociado, con la nueva
+    // fechaNotificacion. Si no hay fechaNotificacion (nunca la
+    // tuvo), no hay nada que recalcular — no debería pasar en la
+    // práctica, porque un plazo exige fechaNotificacion para
+    // existir, pero se cubre por las dudas.
+    const plazosRecalculados = [];
+    if (nuevaFechaNotificacion) {
+      for (const plazo of pendientes) {
+        // modalidad HORAS no se recalcula: la hora límite se
+        // cargó a mano y no depende de este cálculo.
+        if (plazo.modalidad === 'HORAS') continue;
+
+        const diasNoHabiles =
+          plazo.modalidad === 'HABILES' ? await obtenerDiasNoHabiles(tx) : [];
+
+        const fechaVencimiento = calcularFechaVencimiento({
+          fechaNotificacion: nuevaFechaNotificacion,
+          diasCantidad: plazo.diasCantidad,
+          modalidad: plazo.modalidad,
+          diasNoHabiles,
+        });
+
+        const plazoActualizado = await tx.plazoJudicial.update({
+          where: { id: plazo.id },
+          data: { fechaNotificacion: nuevaFechaNotificacion, fechaVencimiento },
+        });
+
+        await registrarAuditoria(tx, {
+          usuarioId,
+          accion: 'EDITAR',
+          entidad: 'PlazoJudicial',
+          entidadId: plazo.id,
+          detalle: `Vencimiento recalculado por cambio de fecha en actuación ${id}`,
+        });
+
+        plazosRecalculados.push(plazoActualizado);
+      }
+    }
+
+    return { ...actuacion, plazosRecalculados };
   });
 }
 
@@ -189,32 +358,65 @@ async function actualizarActuacion(id, datos) {
 // Hard-delete real (no soft-delete): cargarla mal es un error de
 // tipeo, no un hecho procesal a conservar (mismo criterio que
 // ParteProcesal en Módulo 1).
-// Si ya generó un PlazoJudicial, se bloquea el borrado por
-// completo: aunque la FK usa onDelete: SetNull (no rompería la
-// base), se perdería la trazabilidad de qué actuación originó
-// ese plazo — se pide anular/corregir el plazo primero.
+//
+// Si tiene plazos asociados:
+//   - si HAY alguno CUMPLIDO, se bloquea entero.
+//   - si TODOS están PENDIENTE, se borra la actuación Y esos
+//     plazos en cascada (el frontend ya mostró el impacto antes,
+//     vía obtenerImpactoEliminacion, así que acá se ejecuta
+//     directo sin volver a preguntar).
 // ------------------------------------------------------------
-async function eliminarActuacion(id) {
-  await obtenerPorId(id); // valida existencia (tira 404 si no está)
+async function eliminarActuacion(id, usuarioId) {
+  const actuacionExistente = await obtenerPorId(id); // valida existencia (tira 404 si no está)
 
-  const cantidadPlazos = await prisma.plazoJudicial.count({
-    where: { actuacionId: id },
-  });
-  if (cantidadPlazos > 0) {
+  const plazos = await obtenerPlazosDeActuacion(id);
+  const { pendientes, cumplidos } = separarPorEstado(plazos);
+
+  if (cumplidos.length > 0) {
     const error = new Error(
-      'No se puede eliminar esta actuación: ya generó un plazo judicial asociado.'
+      'No se puede eliminar esta actuación: tiene al menos un plazo ya cumplido.'
     );
     error.status = 400;
     throw error;
   }
 
-  await prisma.actuacion.delete({ where: { id } });
+  return prisma.$transaction(async (tx) => {
+    // Auditar cada plazo en cascada ANTES de borrarlo (una vez
+    // eliminado, ya no se puede volver a leer para describirlo).
+    for (const plazo of pendientes) {
+      await registrarAuditoria(tx, {
+        usuarioId,
+        accion: 'ELIMINAR',
+        entidad: 'PlazoJudicial',
+        entidadId: plazo.id,
+        detalle: `Eliminado en cascada al borrar la actuación ${id}`,
+      });
+    }
+
+    // Prisma no borra en cascada por FK acá (la relación no tiene
+    // onDelete: Cascade), así que se borran los plazos a mano
+    // antes de borrar la actuación.
+    await tx.plazoJudicial.deleteMany({ where: { actuacionId: id } });
+
+    await tx.actuacion.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'Actuacion',
+      entidadId: id,
+      detalle: `Actuación ${actuacionExistente.tipo} eliminada (expediente ${actuacionExistente.expedienteId})${
+        pendientes.length > 0 ? `, junto con ${pendientes.length} plazo(s) pendiente(s)` : ''
+      }`,
+    });
+  });
 }
 
 module.exports = {
   crearActuacion,
   listarPorExpediente,
   obtenerPorId,
+  obtenerImpactoEliminacion,
   actualizarActuacion,
   eliminarActuacion,
 };

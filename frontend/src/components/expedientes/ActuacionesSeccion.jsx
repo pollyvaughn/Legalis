@@ -1,18 +1,29 @@
 // ============================================================
 // ActuacionesSeccion.jsx
 // Sección de ExpedienteDetailPage: historial cronológico de
-// actuaciones del expediente (RF5) + form inline para cargar una
-// nueva. Mismo patrón visual que la sección de Partes procesales
-// (lista + botón "+ Agregar" que despliega un form inline, sin modal).
+// actuaciones del expediente (RF5) + form inline para cargar,
+// editar y eliminar.
 //
-// Recibe la lista de actuaciones como prop (ya vienen incluidas
-// en el GET del expediente) y notifica al padre cuando cambian,
-// igual que DocumentosSeccion.
+// EDITAR: form inline por fila (mismo patrón que Partes
+// Procesales), con los 4 campos editables. Si la actuación ya
+// tiene plazos asociados y se cambia fecha/fechaNotificacion, el
+// backend recalcula el vencimiento de cada plazo PENDIENTE (o
+// bloquea si hay alguno CUMPLIDO) — ver regla acordada 05/10/2026.
+// La respuesta puede traer `plazosRecalculados`: se muestra un
+// aviso puntual con cuántos se ajustaron.
+//
+// ELIMINAR: antes de confirmar, se consulta
+// GET /actuaciones/:id/impacto-eliminacion — si hay un plazo
+// cumplido, se bloquea con el motivo; si no, se muestra cuántos
+// plazos PENDIENTE se van a borrar en cascada junto con la
+// actuación, y recién ahí se pide la confirmación final.
 // ============================================================
 
 import { useState } from 'react';
 import api from '../../api/axios';
 import Button from '../ui/Button';
+import Badge from '../ui/Badge';
+import Modal from '../ui/Modal';
 import { Input, SelectInput, Textarea } from '../ui/Input';
 import { OPCIONES_TIPO_ACTUACION, etiquetaTipoActuacion } from '../../constants/tiposActuacion';
 import { useAuth } from '../../context/AuthContext';
@@ -27,9 +38,18 @@ function formatearFecha(fechaIso) {
   });
 }
 
+// Fecha ISO completa → yyyy-mm-dd, formato que espera <input type="date">
+function aInputDate(fechaIso) {
+  if (!fechaIso) return '';
+  return new Date(fechaIso).toISOString().slice(0, 10);
+}
+
 export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange }) {
   const { esAbogado } = useAuth();
 
+  const hoyComoInputDate = new Date().toISOString().slice(0, 10);
+
+  // --- Alta ---
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipo, setTipo] = useState(OPCIONES_TIPO_ACTUACION[0].value);
   const [fecha, setFecha] = useState('');
@@ -38,18 +58,30 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
-  // Fecha de hoy en formato yyyy-mm-dd, para el atributo 'max' de
-  // los inputs de fecha — el calendario nativo no deja elegir un
-  // día posterior, así se evita el 400 del backend antes de que
-  // llegue a mandarse el pedido.
-  const hoyComoInputDate = new Date().toISOString().slice(0, 10);
-
-  // Sugerencia momentánea tras guardar una actuación CON fecha de
-  // notificación: recuerda armar el plazo correspondiente. Es solo
-  // un aviso puntual (no persiste al recargar ni queda pegado a la
-  // actuación en la lista) — se cierra sola al tocar cualquier otra
-  // cosa de la sección.
   const [sugerenciaPlazo, setSugerenciaPlazo] = useState(false);
+
+  // --- Edición inline por fila ---
+  // actuacionEnEdicionId: id de la fila en edición (null = ninguna)
+  const [actuacionEnEdicionId, setActuacionEnEdicionId] = useState(null);
+  const [tipoEdit, setTipoEdit] = useState(OPCIONES_TIPO_ACTUACION[0].value);
+  const [fechaEdit, setFechaEdit] = useState('');
+  const [descripcionEdit, setDescripcionEdit] = useState('');
+  const [fechaNotificacionEdit, setFechaNotificacionEdit] = useState('');
+  const [guardandoEdit, setGuardandoEdit] = useState(false);
+  const [errorEdit, setErrorEdit] = useState('');
+
+  // Aviso puntual tras editar: cuántos plazos se recalcularon.
+  // Es momentáneo, igual criterio que sugerenciaPlazo — no persiste.
+  const [avisoRecalculo, setAvisoRecalculo] = useState(null); // null | { cantidad }
+
+  // --- Eliminación: consulta de impacto + confirmación ---
+  // impacto: null = modal cerrado. Si no es null, es el objeto que
+  // devuelve GET .../impacto-eliminacion, más el id de la actuación
+  // que se está por eliminar.
+  const [impacto, setImpacto] = useState(null); // { actuacionId, puedeEliminar, motivo, plazosPendientes, plazosCumplidos }
+  const [cargandoImpacto, setCargandoImpacto] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState('');
 
   function limpiarForm() {
     setTipo(OPCIONES_TIPO_ACTUACION[0].value);
@@ -91,6 +123,93 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
     }
   }
 
+  // ------------------------------------------------------------
+  // Precarga el form de edición con los datos actuales de la fila.
+  // ------------------------------------------------------------
+  function iniciarEdicion(actuacion) {
+    setActuacionEnEdicionId(actuacion.id);
+    setTipoEdit(actuacion.tipo);
+    setFechaEdit(aInputDate(actuacion.fecha));
+    setDescripcionEdit(actuacion.descripcion);
+    setFechaNotificacionEdit(aInputDate(actuacion.fechaNotificacion));
+    setErrorEdit('');
+  }
+
+  function cancelarEdicion() {
+    setActuacionEnEdicionId(null);
+  }
+
+  async function handleGuardarEdicion(evento) {
+    evento.preventDefault();
+    setErrorEdit('');
+    setGuardandoEdit(true);
+
+    try {
+      const respuesta = await api.put(`/actuaciones/${actuacionEnEdicionId}`, {
+        tipo: tipoEdit,
+        fecha: fechaEdit,
+        descripcion: descripcionEdit,
+        fechaNotificacion: fechaNotificacionEdit || undefined,
+      });
+
+      // El backend puede devolver plazosRecalculados cuando el
+      // cambio de fecha/fechaNotificacion disparó un recálculo de
+      // vencimientos (ver actuacion.service.js, regla del 05/10).
+      const { plazosRecalculados, ...actuacionActualizada } = respuesta.data;
+      if (plazosRecalculados && plazosRecalculados.length > 0) {
+        setAvisoRecalculo({ cantidad: plazosRecalculados.length });
+      }
+
+      onChange(
+        actuaciones.map((a) => (a.id === actuacionEnEdicionId ? { ...a, ...actuacionActualizada } : a))
+      );
+      setActuacionEnEdicionId(null);
+    } catch (err) {
+      const mensaje = err.response?.data?.error || 'No se pudo guardar la edición';
+      setErrorEdit(mensaje);
+    } finally {
+      setGuardandoEdit(false);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Paso 1 de eliminar: consulta el impacto antes de pedir
+  // confirmación. No borra nada todavía.
+  // ------------------------------------------------------------
+  async function abrirConfirmacionEliminar(actuacion) {
+    setErrorEliminar('');
+    setCargandoImpacto(true);
+    setImpacto({ actuacionId: actuacion.id }); // abre el modal ya, con estado de carga
+
+    try {
+      const respuesta = await api.get(`/actuaciones/${actuacion.id}/impacto-eliminacion`);
+      setImpacto({ actuacionId: actuacion.id, ...respuesta.data });
+    } catch (err) {
+      setErrorEliminar(err.response?.data?.error || 'No se pudo consultar el impacto de la eliminación');
+    } finally {
+      setCargandoImpacto(false);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Paso 2 de eliminar: confirmado desde el modal (solo se llega
+  // acá si impacto.puedeEliminar === true).
+  // ------------------------------------------------------------
+  async function confirmarEliminar() {
+    setEliminando(true);
+    setErrorEliminar('');
+
+    try {
+      await api.delete(`/actuaciones/${impacto.actuacionId}`);
+      onChange(actuaciones.filter((a) => a.id !== impacto.actuacionId));
+      setImpacto(null);
+    } catch (err) {
+      setErrorEliminar(err.response?.data?.error || 'No se pudo eliminar la actuación');
+    } finally {
+      setEliminando(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
@@ -112,8 +231,6 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
               size="sm"
               variant="secondary"
               onClick={() => {
-                // Solo cierra el aviso; el alta del plazo se hace
-                // manualmente en la sección de Plazos, más abajo.
                 setSugerenciaPlazo(false);
                 document.getElementById('plazos-seccion')?.scrollIntoView({ behavior: 'smooth' });
               }}
@@ -131,37 +248,127 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
         </div>
       )}
 
+      {avisoRecalculo && (
+        <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            Se recalculó el vencimiento de {avisoRecalculo.cantidad}{' '}
+            {avisoRecalculo.cantidad === 1 ? 'plazo' : 'plazos'} asociado
+            {avisoRecalculo.cantidad === 1 ? '' : 's'} a esta actuación. Revisalo en la sección de
+            Plazos.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAvisoRecalculo(null)}
+            className="text-sm text-amber-500 hover:text-amber-700"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       {actuaciones.length === 0 && !mostrarForm && (
         <p className="text-sm text-gray-500">Todavía no hay actuaciones registradas.</p>
       )}
 
       {actuaciones.length > 0 && (
         <ul className="mb-4 divide-y divide-gray-100">
-          {actuaciones.map((actuacion) => (
-            <li key={actuacion.id} className="py-3 first:pt-0">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {formatearFecha(actuacion.fecha)} · {etiquetaTipoActuacion(actuacion.tipo)}
+          {actuaciones.map((actuacion) =>
+            actuacionEnEdicionId === actuacion.id ? (
+              <li key={actuacion.id} className="py-3 first:pt-0">
+                <form
+                  onSubmit={handleGuardarEdicion}
+                  className="space-y-3 rounded-lg bg-gray-50 p-4"
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    <SelectInput
+                      label="Tipo de actuación"
+                      value={tipoEdit}
+                      onChange={(e) => setTipoEdit(e.target.value)}
+                      opciones={OPCIONES_TIPO_ACTUACION}
+                      className="bg-white"
+                    />
+                    <Input
+                      label="Fecha"
+                      type="date"
+                      value={fechaEdit}
+                      onChange={(e) => setFechaEdit(e.target.value)}
+                      max={hoyComoInputDate}
+                      required
+                      className="bg-white"
+                    />
+                  </div>
+
+                  <Textarea
+                    label="Descripción"
+                    value={descripcionEdit}
+                    onChange={(e) => setDescripcionEdit(e.target.value)}
+                    required
+                    rows={2}
+                    className="bg-white"
+                  />
+
+                  <Input
+                    label="Fecha de notificación (opcional)"
+                    type="date"
+                    value={fechaNotificacionEdit}
+                    onChange={(e) => setFechaNotificacionEdit(e.target.value)}
+                    max={hoyComoInputDate}
+                    className="bg-white"
+                  />
+                  <p className="-mt-2 text-xs text-gray-400">
+                    Si esta actuación ya tiene plazos pendientes, cambiar la fecha recalcula su
+                    vencimiento. Si tiene algún plazo cumplido, el cambio queda bloqueado.
                   </p>
-                  <p className="mt-0.5 text-sm text-gray-600">{actuacion.descripcion}</p>
-                  {actuacion.fechaNotificacion && (
-                    <p className="mt-1 text-xs text-gray-400">
-                      Notificada el {formatearFecha(actuacion.fechaNotificacion)}
-                      {actuacion.parteProcesal && ` · ${actuacion.parteProcesal.nombre}`}
+
+                  {errorEdit && <p className="text-sm text-red-600">{errorEdit}</p>}
+
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={guardandoEdit}>
+                      {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={cancelarEdicion}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              </li>
+            ) : (
+              <li key={actuacion.id} className="py-3 first:pt-0">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatearFecha(actuacion.fecha)} · {etiquetaTipoActuacion(actuacion.tipo)}
                     </p>
+                    <p className="mt-0.5 text-sm text-gray-600">{actuacion.descripcion}</p>
+                    {actuacion.fechaNotificacion && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        Notificada el {formatearFecha(actuacion.fechaNotificacion)}
+                        {actuacion.parteProcesal && ` · ${actuacion.parteProcesal.nombre}`}
+                      </p>
+                    )}
+                  </div>
+                  {esAbogado && (
+                    <div className="flex shrink-0 gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => iniciarEdicion(actuacion)}>
+                        Editar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => abrirConfirmacionEliminar(actuacion)}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
                   )}
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          )}
         </ul>
       )}
 
-      {/* Form inline para registrar una actuación nueva.
-          No incluye edición/eliminación acá: si hace falta corregir
-          o borrar una actuación ya cargada, se maneja aparte (no
-          forma parte de este alcance inicial). */}
+      {/* Form inline para registrar una actuación nueva */}
       {mostrarForm && (
         <form onSubmit={handleAgregar} className="space-y-3 border-t border-gray-100 pt-4">
           <div className="grid grid-cols-2 gap-4">
@@ -220,6 +427,58 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
             </Button>
           </div>
         </form>
+      )}
+
+      {/* --- Modal de impacto / confirmación de eliminación ---
+          Tres estados posibles:
+            1. cargandoImpacto: todavía no sabemos si se puede eliminar.
+            2. impacto.puedeEliminar === false: bloqueado (hay un plazo cumplido).
+            3. impacto.puedeEliminar === true: confirmar, mostrando los
+               plazos PENDIENTE que se borran en cascada (si hay alguno). */}
+      {impacto && (
+        <Modal title="Eliminar actuación" onClose={() => setImpacto(null)}>
+          <div className="px-6 py-5">
+            {cargandoImpacto ? (
+              <p className="text-sm text-gray-500">Revisando si tiene plazos asociados...</p>
+            ) : impacto.puedeEliminar === false ? (
+              <p className="text-sm text-gray-700">{impacto.motivo}</p>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700">
+                  ¿Seguro que querés eliminar esta actuación? Esta acción no se puede deshacer.
+                </p>
+                {impacto.plazosPendientes?.length > 0 && (
+                  <div className="mt-3 rounded-lg bg-amber-50 p-3">
+                    <p className="text-sm font-medium text-amber-800">
+                      Se eliminarán también estos {impacto.plazosPendientes.length} plazo
+                      {impacto.plazosPendientes.length === 1 ? '' : 's'} pendiente
+                      {impacto.plazosPendientes.length === 1 ? '' : 's'}:
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {impacto.plazosPendientes.map((p) => (
+                        <li key={p.id} className="flex items-center gap-2 text-sm text-amber-700">
+                          <Badge tone="yellow">Pendiente</Badge>
+                          {p.tipoPlazo}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+            {errorEliminar && <p className="mt-3 text-sm text-red-600">{errorEliminar}</p>}
+          </div>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setImpacto(null)} disabled={eliminando}>
+              {impacto.puedeEliminar === false ? 'Cerrar' : 'Cancelar'}
+            </Button>
+            {impacto.puedeEliminar && (
+              <Button variant="danger" onClick={confirmarEliminar} disabled={eliminando || cargandoImpacto}>
+                {eliminando ? 'Eliminando...' : 'Sí, eliminar'}
+              </Button>
+            )}
+          </Modal.Footer>
+        </Modal>
       )}
     </div>
   );
