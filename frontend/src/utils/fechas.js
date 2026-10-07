@@ -5,13 +5,14 @@
 // Convierte un ISO ("2026-09-10T14:30:00.000Z") a texto corto: "10 sep 2026".
 // Devuelve "—" si no hay fecha.
 export function formatearFecha(iso) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('es-PY', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  }
+  if (!iso) return '—';
+
+  return new Intl.DateTimeFormat('es-PY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(iso));
+}
 
   // ============================================================
 // FECHAS SIN HORA (vencimientos, recepciones)
@@ -23,12 +24,25 @@ export function formatearFecha(iso) {
 // "2026-10-19T00:00:00.000Z" -> "19 oct 2026"
 export function formatearFechaSola(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-PY', {
-    day: 'numeric',
-    month: 'short',
+
+  return new Intl.DateTimeFormat('es-PY', {
+    day: '2-digit',
+    month: '2-digit',
     year: 'numeric',
     timeZone: 'UTC',
-  });
+  }).format(new Date(iso));
+}
+
+export function formatearFechaHora(iso) {
+  if (!iso) return '—';
+
+  return new Intl.DateTimeFormat('es-PY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
 }
 
 // ISO -> "AAAA-MM-DD" (el formato que usa <input type="date">)

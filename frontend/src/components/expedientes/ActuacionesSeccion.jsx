@@ -27,27 +27,13 @@ import Modal from '../ui/Modal';
 import { Input, SelectInput, Textarea } from '../ui/Input';
 import { OPCIONES_TIPO_ACTUACION, etiquetaTipoActuacion } from '../../constants/tiposActuacion';
 import { useAuth } from '../../context/AuthContext';
+import { aInputFecha, formatearFechaSola, hoyInput } from '../../utils/fechas';
 
-// Fecha ISO (2026-09-22) → formato legible corto (22 sep 2026)
-function formatearFecha(fechaIso) {
-  if (!fechaIso) return null;
-  return new Date(fechaIso).toLocaleDateString('es-PY', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-// Fecha ISO completa → yyyy-mm-dd, formato que espera <input type="date">
-function aInputDate(fechaIso) {
-  if (!fechaIso) return '';
-  return new Date(fechaIso).toISOString().slice(0, 10);
-}
 
 export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange }) {
   const { esAbogado } = useAuth();
 
-  const hoyComoInputDate = new Date().toISOString().slice(0, 10);
+  const hoyComoInputDate = hoyInput();
 
   // --- Alta ---
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -129,9 +115,9 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
   function iniciarEdicion(actuacion) {
     setActuacionEnEdicionId(actuacion.id);
     setTipoEdit(actuacion.tipo);
-    setFechaEdit(aInputDate(actuacion.fecha));
+    setFechaEdit(aInputFecha(actuacion.fecha));
     setDescripcionEdit(actuacion.descripcion);
-    setFechaNotificacionEdit(aInputDate(actuacion.fechaNotificacion));
+    setFechaNotificacionEdit(aInputFecha(actuacion.fechaNotificacion));
     setErrorEdit('');
   }
 
@@ -337,12 +323,12 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-900">
-                      {formatearFecha(actuacion.fecha)} · {etiquetaTipoActuacion(actuacion.tipo)}
+                      {formatearFechaSola(actuacion.fecha)} · {etiquetaTipoActuacion(actuacion.tipo)}
                     </p>
                     <p className="mt-0.5 text-sm text-gray-600">{actuacion.descripcion}</p>
                     {actuacion.fechaNotificacion && (
                       <p className="mt-1 text-xs text-gray-400">
-                        Notificada el {formatearFecha(actuacion.fechaNotificacion)}
+                        Notificada el {formatearFechaSola(actuacion.fechaNotificacion)}
                         {actuacion.parteProcesal && ` · ${actuacion.parteProcesal.nombre}`}
                       </p>
                     )}

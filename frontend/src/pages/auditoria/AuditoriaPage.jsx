@@ -10,6 +10,7 @@ import { SelectInput, Input } from '../../components/ui/Input';
 import Badge from '../../components/ui/Badge';
 import { listarAuditoria, listarEntidadesAuditoria } from '../../services/auditoria.service';
 import { ETIQUETA_ACCION, TONO_ACCION } from '../../constants/auditoria';
+import { formatearFechaHora } from '../../utils/fechas';
 
 // Opciones fijas de acción (espejo del enum AccionAuditoria de Prisma)
 const OPCIONES_ACCION = [
@@ -139,7 +140,7 @@ export default function AuditoriaPage() {
               {filasVisibles.map((fila) => (
                 <tr key={fila.id} className="border-b border-gray-50 last:border-0">
                   <td className="px-5 py-2 whitespace-nowrap text-gray-600">
-                    {new Date(fila.fecha).toLocaleString('es-PY')}
+                    {formatearFechaHora(fila.fecha)}
                   </td>
                   <td className="px-5 py-2 text-gray-700">{fila.usuario?.nombre ?? '—'}</td>
                   <td className="px-5 py-2">

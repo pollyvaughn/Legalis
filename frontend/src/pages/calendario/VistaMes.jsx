@@ -12,7 +12,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { TONO_SEMAFORO } from '../../constants/semaforoPlazos';
 
 const NOMBRES_MES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -62,12 +61,22 @@ export default function VistaMes({ plazos }) {
   // 1-31). Solo considera los que caen en el anio/mes mostrados.
   const plazosPorDia = {};
   for (const plazo of plazos) {
-    const fecha = plazo.fechaVencimiento || plazo.horaLimite;
-    if (!fecha) continue;
-    const fechaDate = new Date(fecha);
-    if (fechaDate.getFullYear() === anio && fechaDate.getMonth() === mes) {
-      const dia = fechaDate.getDate();
-      (plazosPorDia[dia] ||= []).push(plazo);
+    if (plazo.fechaVencimiento) {
+      const [anioFecha, mesFecha, dia] = plazo.fechaVencimiento
+        .slice(0, 10)
+        .split('-')
+        .map(Number);
+  
+      if (anioFecha === anio && mesFecha - 1 === mes) {
+        (plazosPorDia[dia] ||= []).push(plazo);
+      }
+    } else if (plazo.horaLimite) {
+      const fechaHora = new Date(plazo.horaLimite);
+  
+      if (fechaHora.getFullYear() === anio && fechaHora.getMonth() === mes) {
+        const dia = fechaHora.getDate();
+        (plazosPorDia[dia] ||= []).push(plazo);
+      }
     }
   }
 

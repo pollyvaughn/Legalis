@@ -21,6 +21,11 @@ import Badge from '../ui/Badge';
 import { Input, SelectInput, Textarea } from '../ui/Input';
 import { TONO_SEMAFORO, ETIQUETA_SEMAFORO } from '../../constants/semaforoPlazos';
 import { useAuth } from '../../context/AuthContext';
+import {
+  aInputFecha,
+  formatearFechaHora,
+  formatearFechaSola,
+} from '../../utils/fechas';
 
 const OPCIONES_MODALIDAD = [
   { value: 'HABILES', label: 'Días hábiles' },
@@ -28,21 +33,6 @@ const OPCIONES_MODALIDAD = [
   { value: 'HORAS', label: 'Horas (carga manual)' },
 ];
 
-function formatearFecha(fechaIso) {
-  if (!fechaIso) return null;
-  return new Date(fechaIso).toLocaleDateString('es-PY', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-// Convierte una fecha ISO completa (con hora) a formato de
-// <input type="date"> (yyyy-mm-dd), que es lo que ese input espera.
-function aInputDate(fechaIso) {
-  if (!fechaIso) return '';
-  return new Date(fechaIso).toISOString().slice(0, 10);
-}
 
 export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
   const { esAbogado } = useAuth();
@@ -115,7 +105,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
         params: { fechaNotificacion, diasCantidad, modalidad },
       });
       setSugerencia(respuesta.data);
-      setFechaVencimientoEditable(aInputDate(respuesta.data.fechaVencimiento));
+      setFechaVencimientoEditable(aInputFecha(respuesta.data.fechaVencimiento));
     } catch (err) {
       const mensaje = err.response?.data?.error || 'No se pudo calcular el vencimiento';
       setError(mensaje);
@@ -201,8 +191,8 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
                   </p>
                   <p className="mt-0.5 text-sm text-gray-600">
                     {plazo.modalidad === 'HORAS'
-                      ? `Vence: ${formatearFecha(plazo.horaLimite)}`
-                      : `Vence: ${formatearFecha(plazo.fechaVencimiento)}`}
+                      ? `Vence: ${formatearFechaHora(plazo.horaLimite)}`
+                      : `Vence: ${formatearFechaSola(plazo.fechaVencimiento)}`}
                   </p>
                   {plazo.observaciones && (
                     <p className="mt-1 text-xs text-gray-400">{plazo.observaciones}</p>
@@ -309,12 +299,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
                       {sugerencia.limiteConGracia && (
                         <p className="mt-2 text-xs text-gray-500">
                           Con plazo de gracia, hasta las{' '}
-                          {new Date(sugerencia.limiteConGracia).toLocaleString('es-PY', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatearFechaHora(sugerencia.limiteConGracia)}
                         </p>
                       )}
                     </div>

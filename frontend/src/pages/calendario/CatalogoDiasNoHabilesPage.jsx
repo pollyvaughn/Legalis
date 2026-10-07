@@ -22,6 +22,7 @@ import Modal from '../../components/ui/Modal';
 import TablaContainer from '../../components/ui/TablaContainer';
 import DiaNoHabilFormModal from '../../components/calendario/DiaNoHabilFormModal';
 import { useAuth } from '../../context/AuthContext';
+import { formatearFechaSola } from '../../utils/fechas';
 
 // Clases de los botones de texto de cada fila (mismas que los otros catálogos)
 const CLASE_ACCION = 'rounded-lg px-2.5 py-1 text-sm text-gray-600 transition hover:bg-gray-100';
@@ -148,7 +149,7 @@ function CatalogoDiasNoHabilesPage() {
                   <td className="px-5 py-3 font-medium text-gray-900">
                     {/* Rango si hay fechaHasta distinta; día único si no */}
                     {d.fechaHasta && d.fechaHasta !== d.fechaDesde
-                      ? `${formatearFecha(d.fechaDesde)} → ${formatearFecha(d.fechaHasta)}`
+                      ? `${formatearFechaSola(d.fechaDesde)} → ${formatearFechaSola(d.fechaHasta)}`
                       : formatearFecha(d.fechaDesde)}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{d.descripcion}</td>

@@ -12,15 +12,15 @@ import Sidebar from "./Sidebar";
 
 // Formatea la fecha actual en español, ej: "Miércoles, 17 de septiembre de 2026"
 function fechaHoyFormateada() {
-  const fecha = new Date().toLocaleDateString("es-PY", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const fecha = new Intl.DateTimeFormat('es-PY', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
   // Solo el día (primer carácter); no usar className "capitalize"
   // porque también capitaliza "de" y el mes.
-  return fecha.charAt(0).toUpperCase() + fecha.slice(1);
+  return fecha.charAt(0).toLocaleUpperCase('es-PY') + fecha.slice(1);
 }
 
 export default function AppLayout({ children }) {
