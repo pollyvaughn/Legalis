@@ -28,9 +28,16 @@ import { Input, SelectInput, Textarea } from '../ui/Input';
 import { OPCIONES_TIPO_ACTUACION, etiquetaTipoActuacion } from '../../constants/tiposActuacion';
 import { useAuth } from '../../context/AuthContext';
 import { aInputFecha, formatearFechaSola, hoyInput } from '../../utils/fechas';
+import useScrollHighlight from '../../hooks/useScrollHighlight';
 
 
-export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange }) {
+export default function ActuacionesSeccion({
+  expedienteId,
+  actuaciones,
+  onChange,
+  onIrAPlazos,
+  onPlazosActualizados,
+}) {
   const { esAbogado } = useAuth();
 
   const hoyComoInputDate = hoyInput();
@@ -45,6 +52,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
   const [error, setError] = useState('');
 
   const [sugerenciaPlazo, setSugerenciaPlazo] = useState(false);
+  const [actuacionPlazoSugerida, setActuacionPlazoSugerida] = useState(null);
 
   // --- Edición inline por fila ---
   // actuacionEnEdicionId: id de la fila en edición (null = ninguna)
@@ -55,6 +63,13 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
   const [fechaNotificacionEdit, setFechaNotificacionEdit] = useState('');
   const [guardandoEdit, setGuardandoEdit] = useState(false);
   const [errorEdit, setErrorEdit] = useState('');
+
+  const altaActuacionFocus = useScrollHighlight(mostrarForm, 'alta-actuacion');
+
+  const edicionActuacionFocus = useScrollHighlight(
+    actuacionEnEdicionId !== null,
+    actuacionEnEdicionId
+  );
 
   // Aviso puntual tras editar: cuántos plazos se recalcularon.
   // Es momentáneo, igual criterio que sugerenciaPlazo — no persiste.
@@ -97,6 +112,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
       // Si esta actuación tiene fecha de notificación, sugerimos
       // crear el plazo correspondiente (RN-20: todo plazo nace de
       // una notificación) — sin importar el tipo de actuación.
+      setActuacionPlazoSugerida(respuesta.data.id);
       setSugerenciaPlazo(Boolean(respuesta.data.fechaNotificacion));
 
       limpiarForm();
@@ -129,7 +145,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
     evento.preventDefault();
     setErrorEdit('');
     setGuardandoEdit(true);
-
+  
     try {
       const respuesta = await api.put(`/actuaciones/${actuacionEnEdicionId}`, {
         tipo: tipoEdit,
@@ -137,19 +153,20 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
         descripcion: descripcionEdit,
         fechaNotificacion: fechaNotificacionEdit || undefined,
       });
-
-      // El backend puede devolver plazosRecalculados cuando el
-      // cambio de fecha/fechaNotificacion disparó un recálculo de
-      // vencimientos (ver actuacion.service.js, regla del 05/10).
+  
       const { plazosRecalculados, ...actuacionActualizada } = respuesta.data;
-      if (plazosRecalculados && plazosRecalculados.length > 0) {
-        setAvisoRecalculo({ cantidad: plazosRecalculados.length });
-      }
-
+  
       onChange(
-        actuaciones.map((a) => (a.id === actuacionEnEdicionId ? { ...a, ...actuacionActualizada } : a))
+        actuaciones.map((a) =>
+          a.id === actuacionEnEdicionId ? { ...a, ...actuacionActualizada } : a
+        )
       );
       setActuacionEnEdicionId(null);
+  
+      if (plazosRecalculados?.length > 0) {
+        setAvisoRecalculo({ cantidad: plazosRecalculados.length });
+        await onPlazosActualizados?.();
+      }
     } catch (err) {
       const mensaje = err.response?.data?.error || 'No se pudo guardar la edición';
       setErrorEdit(mensaje);
@@ -218,7 +235,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
               variant="secondary"
               onClick={() => {
                 setSugerenciaPlazo(false);
-                document.getElementById('plazos-seccion')?.scrollIntoView({ behavior: 'smooth' });
+                onIrAPlazos?.(actuacionPlazoSugerida);
               }}
             >
               Ir a Plazos
@@ -262,8 +279,9 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
             actuacionEnEdicionId === actuacion.id ? (
               <li key={actuacion.id} className="py-3 first:pt-0">
                 <form
+                  ref={edicionActuacionFocus}
                   onSubmit={handleGuardarEdicion}
-                  className="space-y-3 rounded-lg bg-gray-50 p-4"
+                  className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
                 >
                   <div className="grid grid-cols-2 gap-4">
                     <SelectInput
@@ -271,7 +289,6 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
                       value={tipoEdit}
                       onChange={(e) => setTipoEdit(e.target.value)}
                       opciones={OPCIONES_TIPO_ACTUACION}
-                      className="bg-white"
                     />
                     <Input
                       label="Fecha"
@@ -280,7 +297,6 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
                       onChange={(e) => setFechaEdit(e.target.value)}
                       max={hoyComoInputDate}
                       required
-                      className="bg-white"
                     />
                   </div>
 
@@ -290,30 +306,36 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
                     onChange={(e) => setDescripcionEdit(e.target.value)}
                     required
                     rows={2}
-                    className="bg-white"
                   />
 
                   <Input
                     label="Fecha de notificación (opcional)"
                     type="date"
+                    lang="es-PY"
                     value={fechaNotificacionEdit}
                     onChange={(e) => setFechaNotificacionEdit(e.target.value)}
                     max={hoyComoInputDate}
-                    className="bg-white"
                   />
                   <p className="-mt-2 text-xs text-gray-400">
                     Si esta actuación ya tiene plazos pendientes, cambiar la fecha recalcula su
                     vencimiento. Si tiene algún plazo cumplido, el cambio queda bloqueado.
                   </p>
 
-                  {errorEdit && <p className="text-sm text-red-600">{errorEdit}</p>}
+                  {errorEdit && (
+                    <p
+                      role="alert"
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                    >
+                      {errorEdit}
+                    </p>
+                  )}
 
-                  <div className="flex gap-2">
-                    <Button type="submit" size="sm" disabled={guardandoEdit}>
-                      {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
-                    </Button>
+                  <div className="flex justify-end gap-2">
                     <Button type="button" variant="secondary" size="sm" onClick={cancelarEdicion}>
                       Cancelar
+                    </Button>
+                    <Button type="submit" size="sm" disabled={guardandoEdit}>
+                      {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
                     </Button>
                   </div>
                 </form>
@@ -334,13 +356,15 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
                     )}
                   </div>
                   {esAbogado && (
-                    <div className="flex shrink-0 gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button variant="ghost" size="sm" onClick={() => iniciarEdicion(actuacion)}>
                         Editar
                       </Button>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
+                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
                         onClick={() => abrirConfirmacionEliminar(actuacion)}
                       >
                         Eliminar
@@ -356,16 +380,24 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
 
       {/* Form inline para registrar una actuación nueva */}
       {mostrarForm && (
-        <form onSubmit={handleAgregar} className="space-y-3 border-t border-gray-100 pt-4">
+        <form
+          ref={altaActuacionFocus}
+          onSubmit={handleAgregar}
+          className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+        >
+          <p className="text-xs text-gray-500">
+            * Campo obligatorio
+          </p>
           <div className="grid grid-cols-2 gap-4">
-            <SelectInput
-              label="Tipo de actuación"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              opciones={OPCIONES_TIPO_ACTUACION}
-            />
+          <SelectInput
+            label="Tipo de actuación *"
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value)}
+            opciones={OPCIONES_TIPO_ACTUACION}
+            required
+          />
             <Input
-              label="Fecha"
+              label="Fecha *"
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
@@ -375,7 +407,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
           </div>
 
           <Textarea
-            label="Descripción"
+            label="Descripción *"
             value={descripcion}
             onChange={(e) => setDescripcion(e.target.value)}
             required
@@ -386,6 +418,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
           <Input
             label="Fecha de notificación (opcional)"
             type="date"
+            lang="es-PY"
             value={fechaNotificacion}
             onChange={(e) => setFechaNotificacion(e.target.value)}
             max={hoyComoInputDate}
@@ -396,10 +429,7 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={guardando}>
-              {guardando ? 'Guardando...' : 'Guardar actuación'}
-            </Button>
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="secondary"
@@ -410,6 +440,9 @@ export default function ActuacionesSeccion({ expedienteId, actuaciones, onChange
               }}
             >
               Cancelar
+            </Button>
+            <Button type="submit" disabled={guardando}>
+              {guardando ? 'Guardando...' : 'Registrar'}
             </Button>
           </div>
         </form>

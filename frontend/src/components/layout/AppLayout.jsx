@@ -30,10 +30,7 @@ export default function AppLayout({ children }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* --- Header superior --- */}
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4">
-          <h2 className="text-base font-medium text-slate-800">
-            Legalis
-          </h2>
+        <header className="flex items-center justify-end border-b border-slate-200 bg-white px-8 py-4">
           <span className="text-sm text-slate-500">
             {fechaHoyFormateada()}
           </span>

@@ -30,11 +30,14 @@ import { useAuth } from '../../context/AuthContext';
 import DocumentosSeccion from '../../components/asesorias/DocumentosSeccion';
 import ActuacionesSeccion from '../../components/expedientes/ActuacionesSeccion';
 import PlazosSeccion from '../../components/expedientes/PlazosSeccion';
+import PartesSeccion from '../../components/expedientes/PartesSeccion';
 
-// Roles procesales posibles, según el enum del schema de Prisma.
-// Si el enum cambia en el backend, hay que actualizar esta lista.
-const ROLES_PROCESALES = ['ACTOR', 'DEMANDADO', 'TERCERO', 'REPRESENTANTE_ESTATAL', 'DEFENSA'];
-const OPCIONES_ROLES = ROLES_PROCESALES.map((rol) => ({ value: rol, label: rol }));
+// Muestra el valor, o un guión si está vacío/null — evita que
+// la lista de partes se vea inconsistente entre sí (ver backlog).
+function conPlaceholder(valor) {
+  return valor && valor.trim() !== '' ? valor : '—';
+}
+
 // Color del Badge según el estado procesal (mismos tonos que en ExpedientesListPage)
 const TONO_ESTADO_PROCESAL = {
   EN_TRAMITE: 'blue',
@@ -43,12 +46,6 @@ const TONO_ESTADO_PROCESAL = {
   ARCHIVADO: 'gray',
   CONCLUIDO: 'green',
 };
-
-// Muestra el valor, o un guión si está vacío/null — evita que
-// la lista de partes se vea inconsistente entre sí (ver backlog).
-function conPlaceholder(valor) {
-  return valor && valor.trim() !== '' ? valor : '—';
-}
 
 function ExpedienteDetailPage() {
   const { esAbogado } = useAuth();
@@ -70,37 +67,12 @@ function ExpedienteDetailPage() {
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [errorEstado, setErrorEstado] = useState('');
 
-  // Estado del form inline para AGREGAR una parte nueva
-  const [mostrarFormAgregar, setMostrarFormAgregar] = useState(false);
-  const [nombreParte, setNombreParte] = useState('');
-  const [documentoParte, setDocumentoParte] = useState('');
-  const [rolParte, setRolParte] = useState(ROLES_PROCESALES[0]);
-  const [guardandoParte, setGuardandoParte] = useState(false);
-  const [errorParte, setErrorParte] = useState('');
-  const [rolEspecificoParte, setRolEspecificoParte] = useState('');
-
-  // Estado del form inline para EDITAR una parte existente.
-  // parteEnEdicionId guarda el id de la parte que se está editando
-  // (null = ninguna). Los demás campos son los valores del form.
-  const [parteEnEdicionId, setParteEnEdicionId] = useState(null);
-  const [nombreEdit, setNombreEdit] = useState('');
-  const [documentoEdit, setDocumentoEdit] = useState('');
-  const [rolEdit, setRolEdit] = useState(ROLES_PROCESALES[0]);
-  const [rolEspecificoEdit, setRolEspecificoEdit] = useState('');
-  const [guardandoEdit, setGuardandoEdit] = useState(false);
-  const [errorEdit, setErrorEdit] = useState('');
-
-  // Estado del modal de confirmación para ELIMINAR una parte.
-  // parteAEliminar guarda la parte completa (null = modal cerrado)
-  // para poder mostrar su nombre en el mensaje de confirmación.
-  const [parteAEliminar, setParteAEliminar] = useState(null);
-  const [eliminandoParte, setEliminandoParte] = useState(false);
-  const [errorEliminar, setErrorEliminar] = useState('');
-
   // Plazos judiciales del expediente (Módulo 2). Se cargan aparte
   // del expediente porque este endpoint calcula el semáforo al
   // vuelo (ver PlazosSeccion / plazo.service.js).
   const [plazos, setPlazos] = useState([]);
+  const [actuacionIdParaPlazo, setActuacionIdParaPlazo] = useState('');
+  const [errorPlazos, setErrorPlazos] = useState('');
 
   // ------------------------------------------
   // Trae el expediente del backend. Pide incluirInactivos=true
@@ -118,29 +90,25 @@ function ExpedienteDetailPage() {
     }
   }
 
-  // IMPORTANTE: este efecto es el que dispara la carga inicial del
-  // expediente. Sin él, cargarExpediente() queda definida pero
-  // nunca se ejecuta, y la pantalla se queda en "Cargando..." para
-  // siempre (bug detectado y corregido el 23/09/2026).
-  useEffect(() => {
-    cargarExpediente();
-  }, [id]);
+  async function cargarPlazos() {
+  try {
+    setErrorPlazos('');
+    const respuesta = await api.get(`/expedientes/${id}/plazos`);
+    setPlazos(respuesta.data);
+  } catch (err) {
+    setErrorPlazos(
+      err.response?.data?.error || 'No se pudieron actualizar los plazos del expediente'
+    );
+  }
+}
 
-  // Carga los plazos judiciales del expediente, con el semáforo ya
-  // calculado por el backend. Falla en silencio: si no carga, la
-  // sección de Plazos simplemente muestra "no hay plazos" en vez
-  // de romper toda la pantalla del expediente.
-  useEffect(() => {
-    async function cargarPlazos() {
-      try {
-        const respuesta = await api.get(`/expedientes/${id}/plazos`);
-        setPlazos(respuesta.data);
-      } catch (err) {
-        // silencioso a propósito, ver comentario arriba
-      }
-    }
-    cargarPlazos();
-  }, [id]);
+useEffect(() => {
+  cargarExpediente();
+}, [id]);
+
+useEffect(() => {
+  cargarPlazos();
+}, [id]);
 
   // ------------------------------------------
   // iniciarEdicion: precarga el form con los datos actuales
@@ -212,104 +180,6 @@ function ExpedienteDetailPage() {
     }
   }
 
-  // ------------------------------------------
-  // handleAgregarParte: envía la nueva parte al backend.
-  // ------------------------------------------
-  async function handleAgregarParte(evento) {
-    evento.preventDefault();
-    setErrorParte('');
-    setGuardandoParte(true);
-
-    try {
-      await api.post(`/expedientes/${id}/partes`, {
-        nombre: nombreParte,
-        documento: documentoParte || undefined,
-        rol: rolParte,
-        rolEspecifico: rolEspecificoParte || undefined,
-      });
-
-      // Limpia el form y lo cierra
-      setNombreParte('');
-      setDocumentoParte('');
-      setRolParte(ROLES_PROCESALES[0]);
-      setRolEspecificoParte('');
-      setMostrarFormAgregar(false);
-
-      // Refresca el expediente para mostrar la parte nueva
-      await cargarExpediente();
-    } catch (err) {
-      const mensaje = err.response?.data?.error || 'No se pudo agregar la parte';
-      setErrorParte(mensaje);
-    } finally {
-      setGuardandoParte(false);
-    }
-  }
-
-  // ------------------------------------------
-  // iniciarEdicionParte: precarga el form de edición con los datos
-  // actuales de la parte clickeada, y lo abre.
-  // ------------------------------------------
-  function iniciarEdicionParte(parte) {
-    setParteEnEdicionId(parte.id);
-    setNombreEdit(parte.nombre);
-    setDocumentoEdit(parte.documento || '');
-    setRolEdit(parte.rol);
-    setRolEspecificoEdit(parte.rolEspecifico || '');
-    setErrorEdit('');
-  }
-
-  function cancelarEdicionParte() {
-    setParteEnEdicionId(null);
-  }
-
-  // ------------------------------------------
-  // handleGuardarEdicionParte: envía el PUT con los cambios de la
-  // parte que se está editando actualmente.
-  // ------------------------------------------
-  async function handleGuardarEdicionParte(evento) {
-    evento.preventDefault();
-    setErrorEdit('');
-    setGuardandoEdit(true);
-
-    try {
-      await api.put(`/partes/${parteEnEdicionId}`, {
-        nombre: nombreEdit,
-        documento: documentoEdit || null,
-        rol: rolEdit,
-        rolEspecifico: rolEspecificoEdit || null,
-      });
-
-      setParteEnEdicionId(null);
-      await cargarExpediente();
-    } catch (err) {
-      const mensaje = err.response?.data?.error || 'No se pudo guardar la edición';
-      setErrorEdit(mensaje);
-    } finally {
-      setGuardandoEdit(false);
-    }
-  }
-
-  // ------------------------------------------
-  // handleEliminarParte: borra la parte confirmada en el modal.
-  // Es un borrado real (no se puede deshacer), por eso pasa
-  // siempre por confirmación previa.
-  // ------------------------------------------
-  async function handleEliminarParte() {
-    setErrorEliminar('');
-    setEliminandoParte(true);
-
-    try {
-      await api.delete(`/partes/${parteAEliminar.id}`);
-      setParteAEliminar(null);
-      await cargarExpediente(); // refresca la lista sin la parte borrada
-    } catch (err) {
-      const mensaje = err.response?.data?.error || 'No se pudo eliminar la parte';
-      setErrorEliminar(mensaje);
-    } finally {
-      setEliminandoParte(false);
-    }
-  }
-
   if (cargando) {
     return <p className="text-sm text-gray-500">Cargando expediente...</p>;
   }
@@ -348,7 +218,7 @@ function ExpedienteDetailPage() {
             </div>
           </div>
           {esAbogado && !editando && (
-            <div className="flex gap-2">
+            <div className="flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={iniciarEdicion}>
                 Editar
               </Button>
@@ -513,158 +383,23 @@ function ExpedienteDetailPage() {
             {errorForm && <p className="text-sm text-red-600">{errorForm}</p>}
 
             <div className="flex gap-2 pt-2">
-              <Button type="submit" disabled={guardando}>
-                {guardando ? 'Guardando...' : 'Guardar cambios'}
-              </Button>
               <Button type="button" variant="secondary" onClick={() => setEditando(false)}>
                 Cancelar
+              </Button>
+              <Button type="submit" disabled={guardando}>
+                {guardando ? 'Guardando...' : 'Guardar cambios'}
               </Button>
             </div>
           </form>
         )}
       </div>
 
-      {/* --- Partes procesales (edición inline por fila, independiente de arriba) --- */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Partes procesales</h2>
-          {esAbogado && !mostrarFormAgregar && (
-            <Button size="sm" onClick={() => setMostrarFormAgregar(true)}>
-              + Agregar parte
-            </Button>
-          )}
-        </div>
-
-        {/* Lista de partes ya cargadas */}
-        {expediente.partes.length === 0 && !mostrarFormAgregar && (
-          <p className="text-sm text-gray-500">Todavía no hay partes cargadas.</p>
-        )}
-
-        {expediente.partes.length > 0 && (
-          <ul className="mb-4 divide-y divide-gray-100">
-            {expediente.partes.map((parte) => (
-              <li key={parte.id} className="py-3 first:pt-0">
-                {parteEnEdicionId === parte.id ? (
-                  <form
-                    onSubmit={handleGuardarEdicionParte}
-                    className="space-y-3 rounded-lg bg-gray-50 p-4"
-                  >
-                    <Input
-                      label="Nombre"
-                      value={nombreEdit}
-                      onChange={(e) => setNombreEdit(e.target.value)}
-                      required
-                      className="bg-white"
-                    />
-
-                    <Input
-                      label="Documento"
-                      value={documentoEdit}
-                      onChange={(e) => setDocumentoEdit(e.target.value)}
-                      className="bg-white"
-                    />
-
-                    <SelectInput
-                      label="Rol procesal"
-                      value={rolEdit}
-                      onChange={(e) => setRolEdit(e.target.value)}
-                      opciones={OPCIONES_ROLES}
-                      className="bg-white"
-                    />
-
-                    <Input
-                      label="Rol específico (opcional)"
-                      value={rolEspecificoEdit}
-                      onChange={(e) => setRolEspecificoEdit(e.target.value)}
-                      placeholder="Ej: Imputado, Apoderado"
-                      className="bg-white"
-                    />
-
-                    {errorEdit && <p className="text-sm text-red-600">{errorEdit}</p>}
-
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" disabled={guardandoEdit}>
-                        {guardandoEdit ? 'Guardando...' : 'Guardar cambios'}
-                      </Button>
-                      <Button type="button" variant="secondary" size="sm" onClick={cancelarEdicionParte}>
-                        Cancelar
-                      </Button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{parte.nombre}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        {parte.rol} · {conPlaceholder(parte.documento)} · {conPlaceholder(parte.rolEspecifico)}
-                      </p>
-                    </div>
-                    {esAbogado && (
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => iniciarEdicionParte(parte)}>
-                          Editar
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setErrorEliminar('');
-                            setParteAEliminar(parte);
-                          }}
-                        >
-                          Eliminar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* Form inline para agregar una parte nueva */}
-        {mostrarFormAgregar && (
-          <form onSubmit={handleAgregarParte} className="space-y-3 border-t border-gray-100 pt-4">
-            <Input
-              label="Nombre"
-              value={nombreParte}
-              onChange={(e) => setNombreParte(e.target.value)}
-              required
-            />
-
-            <Input
-              label="Documento (opcional)"
-              value={documentoParte}
-              onChange={(e) => setDocumentoParte(e.target.value)}
-            />
-
-            <SelectInput
-              label="Rol procesal"
-              value={rolParte}
-              onChange={(e) => setRolParte(e.target.value)}
-              opciones={OPCIONES_ROLES}
-            />
-
-            <Input
-              label="Rol específico (opcional)"
-              value={rolEspecificoParte}
-              onChange={(e) => setRolEspecificoParte(e.target.value)}
-              placeholder="Ej: Imputado, Apoderado"
-            />
-
-            {errorParte && <p className="text-sm text-red-600">{errorParte}</p>}
-
-            <div className="flex gap-2">
-              <Button type="submit" disabled={guardandoParte}>
-                {guardandoParte ? 'Guardando...' : 'Guardar parte'}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setMostrarFormAgregar(false)}>
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        )}
+      <div className="mt-6">
+        <PartesSeccion
+          expedienteId={id}
+          partes={expediente.partes}
+          onRefresh={cargarExpediente}
+        />
       </div>
 
       {/* --- Documentos recibidos del cliente para este expediente --- */}
@@ -682,12 +417,24 @@ function ExpedienteDetailPage() {
           expedienteId={id}
           actuaciones={expediente.actuaciones || []}
           onChange={(lista) => setExpediente((e) => ({ ...e, actuaciones: lista }))}
+          onIrAPlazos={(actuacionId) => {
+            setActuacionIdParaPlazo(String(actuacionId));
+            document.getElementById('plazos-seccion')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          onPlazosActualizados={cargarPlazos}
         />
       </div>
 
       {/* --- Plazos judiciales del expediente (Módulo 2) --- */}
       <div className="mt-6">
-        <PlazosSeccion expedienteId={id} plazos={plazos} onChange={setPlazos} />
+      <PlazosSeccion
+        expedienteId={id}
+        plazos={plazos}
+        onChange={setPlazos}
+        actuaciones={expediente.actuaciones || []}
+        actuacionIdParaPlazo={actuacionIdParaPlazo}
+        onActuacionIdParaPlazoChange={setActuacionIdParaPlazo}
+      />
       </div>
 
       {/* --- Modal de confirmación para inactivar/reactivar --- */}
@@ -731,31 +478,6 @@ function ExpedienteDetailPage() {
                 : expediente.activo
                 ? 'Sí, inactivar'
                 : 'Sí, reactivar'}
-            </Button>
-          </Modal.Footer>
-        </Modal>
-      )}
-
-      {/* --- Modal de confirmación para ELIMINAR una parte (borrado real) --- */}
-      {parteAEliminar && (
-        <Modal title="Eliminar parte procesal" onClose={() => setParteAEliminar(null)}>
-          <div className="px-6 py-5">
-            <p className="text-sm text-gray-700">
-              ¿Seguro que querés eliminar a <strong>{parteAEliminar.nombre}</strong> de este
-              expediente? Esta acción no se puede deshacer.
-            </p>
-            {errorEliminar && <p className="mt-3 text-sm text-red-600">{errorEliminar}</p>}
-          </div>
-          <Modal.Footer>
-            <Button
-              variant="secondary"
-              onClick={() => setParteAEliminar(null)}
-              disabled={eliminandoParte}
-            >
-              Cancelar
-            </Button>
-            <Button variant="danger" onClick={handleEliminarParte} disabled={eliminandoParte}>
-              {eliminandoParte ? 'Eliminando...' : 'Sí, eliminar'}
             </Button>
           </Modal.Footer>
         </Modal>

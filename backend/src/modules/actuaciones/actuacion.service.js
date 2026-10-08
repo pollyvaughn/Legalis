@@ -279,8 +279,16 @@ async function actualizarActuacion(id, datos, usuarioId) {
   const { pendientes, cumplidos } = separarPorEstado(plazos);
 
   if (cumplidos.length > 0) {
+    const nombresPlazos = cumplidos
+      .map((plazo) => plazo.tipoPlazo?.nombre)
+      .filter(Boolean);
+
+    const detallePlazos = nombresPlazos.length
+      ? ` Plazo(s): ${nombresPlazos.join(', ')}.`
+      : '';
+
     const error = new Error(
-      'Esta actuación tiene un plazo ya cumplido: no se puede modificar su fecha ni fecha de notificación.'
+      `No se puede cambiar la fecha ni la fecha de notificación de esta actuación porque tiene plazo(s) marcado(s) como cumplido.${detallePlazos} Los plazos cumplidos son parte del historial. Podés editar el tipo o la descripción sin cambiar las fechas.`
     );
     error.status = 400;
     throw error;

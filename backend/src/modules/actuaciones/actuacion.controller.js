@@ -99,6 +99,10 @@ async function actualizar(req, res, next) {
 
     return res.json(actuacion);
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+  
     return next(error);
   }
 }

@@ -121,7 +121,7 @@ async function crearPlazo(expedienteId, datos) {
     throw error;
   }
 
-  return prisma.plazoJudicial.create({
+  const plazo = await prisma.plazoJudicial.create({
     data: {
       expedienteId,
       actuacionId: actuacionId ?? null,
@@ -133,7 +133,12 @@ async function crearPlazo(expedienteId, datos) {
       horaLimite: horaLimite ? new Date(horaLimite) : null,
       observaciones: observaciones ?? null,
     },
+    include: {
+      tipoPlazo: { select: { id: true, nombre: true } },
+    },
   });
+  
+  return conSemaforo(plazo);
 }
 
 // ------------------------------------------------------------

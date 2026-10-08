@@ -17,6 +17,7 @@ import Button from '../ui/Button';
 import { Input } from '../ui/Input';
 import { formatearFechaSola, aInputFecha, hoyInput } from '../../utils/fechas';
 import { useAuth } from '../../context/AuthContext';
+import useScrollHighlight from '../../hooks/useScrollHighlight';
 
 // Sugerencias del campo "tipo" (se puede escribir cualquier otro texto)
 const SUGERENCIAS = [
@@ -48,6 +49,16 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
 
   // Id del documento que se está por eliminar (confirmación en la propia fila)
   const [borrarId, setBorrarId] = useState(null);
+
+  const altaDocumentoFocus = useScrollHighlight(
+    form?.id === null,
+    'alta-documento'
+  );
+  
+  const edicionDocumentoFocus = useScrollHighlight(
+    form?.id != null,
+    form?.id
+  );
 
   function abrirNuevo() {
     setError('');
@@ -116,7 +127,7 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
   return (
     <div className="border-gray-200">
       {/* --- Título + acción --- */}
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
         <h2 className="text-base font-semibold text-gray-900">Documentos recibidos</h2>
           <p className="text-xs text-gray-400">Solo se registra la recepción; no se suben archivos.</p>
@@ -128,9 +139,143 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
         )}
       </div>
 
-      {/* --- Formulario de alta / edición --- */}
-      {form && (
-        <form onSubmit={handleSubmit} className="mb-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      {/* --- Lista de documentos --- */}
+      {documentos.length === 0 ? (
+        !form && <p className="text-sm text-gray-500">Todavía no se registró ningún documento.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100">
+          {documentos.map((doc) => (
+            <li key={doc.id} className="py-3 first:pt-0">
+              {form?.id === doc.id ? (
+                <form
+                  ref={edicionDocumentoFocus}
+                  onSubmit={handleSubmit}
+                  className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="Tipo de documento *"
+                      name="tipoDocumento"
+                      value={form.tipoDocumento}
+                      onChange={handleChange}
+                      list="sugerencias-documentos"
+                      maxLength={150}
+                      required
+                    />
+                    <Input
+                      label="Fecha de recepción *"
+                      type="date"
+                      name="fechaRecepcion"
+                      value={form.fechaRecepcion}
+                      onChange={handleChange}
+                      max={hoyInput()}
+                      required
+                    />
+                  </div>
+
+                  <Input
+                    label="Observaciones (opcional)"
+                    name="observaciones"
+                    value={form.observaciones}
+                    onChange={handleChange}
+                    maxLength={500}
+                    placeholder="Ej: Faltan las de agosto"
+                  />
+
+                  {error && (
+                    <p role="alert" className="text-sm text-red-700">
+                      {error}
+                    </p>
+                  )}
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setForm(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button type="submit" size="sm" disabled={guardando}>
+                      {guardando ? 'Guardando...' : 'Guardar cambios'}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{doc.tipoDocumento}</p>
+                    <p className="text-xs text-gray-500">
+                      Recibido el {formatearFechaSola(doc.fechaRecepcion)}
+                    </p>
+                    {doc.observaciones && (
+                      <p className="mt-0.5 text-xs text-gray-500">{doc.observaciones}</p>
+                    )}
+                  </div>
+
+                  {esAbogado && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {borrarId === doc.id ? (
+                        <>
+                          <span className="text-sm text-gray-600">¿Eliminar?</span>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            onClick={() => eliminar(doc.id)}
+                          >
+                            Sí
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setBorrarId(null)}
+                          >
+                            No
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirEditar(doc)}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => setBorrarId(doc.id)}
+                          >
+                            Eliminar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+            {/* --- Formulario de alta / edición --- */}
+            {form?.id === null && (
+        <form 
+          ref={altaDocumentoFocus}
+          onSubmit={handleSubmit} 
+          className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+        >
+          <p className="text-xs text-gray-500">
+            * Campo obligatorio
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Tipo de documento *"
@@ -176,45 +321,6 @@ export default function DocumentosSeccion({ urlBase, documentos, onChange }) {
             </Button>
           </div>
         </form>
-      )}
-
-      {/* --- Lista de documentos --- */}
-      {documentos.length === 0 ? (
-        !form && <p className="text-sm text-gray-500">Todavía no se registró ningún documento.</p>
-      ) : (
-        <ul className="divide-y divide-gray-100">
-          {documentos.map((doc) => (
-            <li key={doc.id} className="flex items-start justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">{doc.tipoDocumento}</p>
-                <p className="text-xs text-gray-500">Recibido el {formatearFechaSola(doc.fechaRecepcion)}</p>
-                {doc.observaciones && <p className="mt-0.5 text-xs text-gray-500">{doc.observaciones}</p>}
-              </div>
-
-              {esAbogado &&
-                (borrarId === doc.id ? (
-                  <div className="flex shrink-0 items-center gap-2 text-sm">
-                    <span className="text-gray-600">¿Eliminar?</span>
-                    <button onClick={() => eliminar(doc.id)} className="font-medium text-red-600 hover:underline">
-                      Sí
-                    </button>
-                    <button onClick={() => setBorrarId(null)} className="text-gray-500 hover:underline">
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex shrink-0 gap-3 text-sm">
-                    <button onClick={() => abrirEditar(doc)} className="text-gray-600 hover:underline">
-                      Editar
-                    </button>
-                    <button onClick={() => setBorrarId(doc.id)} className="text-red-600 hover:underline">
-                      Eliminar
-                    </button>
-                  </div>
-                ))}
-            </li>
-          ))}
-        </ul>
       )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

@@ -26,6 +26,9 @@ import {
   formatearFechaHora,
   formatearFechaSola,
 } from '../../utils/fechas';
+import Modal from '../ui/Modal';
+import { etiquetaTipoActuacion } from '../../constants/tiposActuacion';
+import useScrollHighlight from '../../hooks/useScrollHighlight';
 
 const OPCIONES_MODALIDAD = [
   { value: 'HABILES', label: 'Días hábiles' },
@@ -34,7 +37,14 @@ const OPCIONES_MODALIDAD = [
 ];
 
 
-export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
+export default function PlazosSeccion({
+  expedienteId,
+  plazos,
+  onChange,
+  actuaciones,
+  actuacionIdParaPlazo,
+  onActuacionIdParaPlazoChange,
+}) {
   const { esAbogado } = useAuth();
 
   const [tiposPlazo, setTiposPlazo] = useState([]);
@@ -53,7 +63,29 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
   const [fechaVencimientoEditable, setFechaVencimientoEditable] = useState('');
   const [calculando, setCalculando] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(''); 
+
+  const [plazoAConfirmar, setPlazoAConfirmar] = useState(null);
+  const [marcandoCumplido, setMarcandoCumplido] = useState(false);
+  const [errorCumplido, setErrorCumplido] = useState('');
+
+  const formularioFocus = useScrollHighlight(
+    mostrarForm && !cargandoTipos,
+    'alta-plazo'
+  );
+
+  useEffect(() => {
+    const actuacionSeleccionada = actuaciones.find(
+      (actuacion) => String(actuacion.id) === String(actuacionIdParaPlazo)
+    );
+  
+    setFechaNotificacion(
+      actuacionSeleccionada?.fechaNotificacion
+        ? aInputFecha(actuacionSeleccionada.fechaNotificacion)
+        : ''
+    );
+    setSugerencia(null);
+  }, [actuacionIdParaPlazo, actuaciones]);
 
   // Trae el catálogo de tipos de plazo una sola vez, al abrir el form.
   useEffect(() => {
@@ -93,6 +125,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
     setObservaciones('');
     setSugerencia(null);
     setFechaVencimientoEditable('');
+    onActuacionIdParaPlazoChange('');
   }
 
   // Paso 1: pide la sugerencia sin guardar nada.
@@ -130,6 +163,9 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
         fechaVencimiento: modalidad !== 'HORAS' ? fechaVencimientoEditable : undefined,
         horaLimite: modalidad === 'HORAS' ? horaLimite : undefined,
         observaciones: observaciones || undefined,
+        actuacionId: actuacionIdParaPlazo
+          ? Number(actuacionIdParaPlazo)
+          : undefined,
       });
 
       onChange([...plazos, respuesta.data]);
@@ -143,12 +179,37 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
     }
   }
 
-  async function handleMarcarCumplido(plazoId) {
+  function abrirConfirmacionCumplido(plazo) {
+    setErrorCumplido('');
+    setPlazoAConfirmar(plazo);
+  }
+  
+  async function confirmarMarcarCumplido() {
+    if (!plazoAConfirmar) return;
+  
+    setMarcandoCumplido(true);
+    setErrorCumplido('');
+  
     try {
-      const respuesta = await api.patch(`/plazos/${plazoId}/cumplido`);
-      onChange(plazos.map((p) => (p.id === plazoId ? respuesta.data : p)));
+      const respuesta = await api.patch(
+        `/plazos/${plazoAConfirmar.id}/cumplido`
+      );
+  
+      onChange(
+        plazos.map((p) =>
+          p.id === plazoAConfirmar.id
+            ? { ...p, ...respuesta.data, semaforo: 'CUMPLIDO' }
+            : p
+        )
+      );
+  
+      setPlazoAConfirmar(null);
     } catch (err) {
-      setError('No se pudo marcar el plazo como cumplido');
+      setErrorCumplido(
+        err.response?.data?.error || 'No se pudo marcar el plazo como cumplido'
+      );
+    } finally {
+      setMarcandoCumplido(false);
     }
   }
 
@@ -203,7 +264,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
                     {ETIQUETA_SEMAFORO[plazo.semaforo] || plazo.semaforo}
                   </Badge>
                   {esAbogado && plazo.estado === 'PENDIENTE' && (
-                    <Button variant="ghost" size="sm" onClick={() => handleMarcarCumplido(plazo.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => abrirConfirmacionCumplido(plazo)}>
                       Marcar cumplido
                     </Button>
                   )}
@@ -215,22 +276,42 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
       )}
 
       {mostrarForm && (
-        <div className="space-y-3 border-t border-gray-100 pt-4">
+        <div> 
           {cargandoTipos ? (
             <p className="text-sm text-gray-500">Cargando tipos de plazo...</p>
           ) : (
-            <form onSubmit={handleGuardar} className="space-y-3">
+            <form 
+              ref={formularioFocus}
+              onSubmit={handleGuardar} 
+              className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4"
+            >
+              <p className="text-xs text-gray-500">
+                * Campo obligatorio
+              </p>
               <SelectInput
-                label="Tipo de plazo"
+                label="Tipo de plazo *"
                 value={tipoPlazoId}
                 onChange={(e) => handleElegirTipoPlazo(e.target.value)}
                 opciones={opcionesTiposPlazo}
                 required
               />
 
+              <SelectInput
+                label="Actuación que origina el plazo (opcional)"
+                value={actuacionIdParaPlazo}
+                onChange={(e) => onActuacionIdParaPlazoChange(e.target.value)}
+                opciones={[
+                  { value: '', label: 'Sin actuación asociada' },
+                  ...actuaciones.map((actuacion) => ({
+                    value: String(actuacion.id),
+                    label: `${formatearFechaSola(actuacion.fecha)} · ${etiquetaTipoActuacion(actuacion.tipo)} · ${actuacion.descripcion}`,
+                  })),
+                ]}
+              />
+
               <div className="grid grid-cols-3 gap-4">
                 <Input
-                  label="Fecha de notificación"
+                  label="Fecha de notificación *"
                   type="date"
                   value={fechaNotificacion}
                   onChange={(e) => {
@@ -265,7 +346,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
               {/* Modalidad HORAS: carga directa, sin cálculo (RN-19) */}
               {modalidad === 'HORAS' ? (
                 <Input
-                  label="Fecha y hora límite"
+                  label="Fecha y hora límite *"
                   type="datetime-local"
                   value={horaLimite}
                   onChange={(e) => setHoraLimite(e.target.value)}
@@ -319,25 +400,7 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
               {/* El botón Guardar solo aparece una vez que hay algo
                   que guardar: ya se calculó (no-HORAS) o ya se cargó
                   la hora límite (HORAS). */}
-              {(sugerencia || puedeGuardarHoras) && (
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={guardando}>
-                    {guardando ? 'Guardando...' : 'Guardar plazo'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      limpiarForm();
-                      setError('');
-                      setMostrarForm(false);
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              )}
-              {!sugerencia && !puedeGuardarHoras && (
+              <div className="flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="secondary"
@@ -349,8 +412,63 @@ export default function PlazosSeccion({ expedienteId, plazos, onChange }) {
                 >
                   Cancelar
                 </Button>
-              )}
+
+                {(sugerencia || puedeGuardarHoras) && (
+                  <Button type="submit" disabled={guardando}>
+                    {guardando ? 'Guardando...' : 'Guardar plazo'}
+                  </Button>
+                )}
+              </div>
             </form>
+          )}
+          {plazoAConfirmar && (
+            <Modal
+              title="Marcar plazo como cumplido"
+              onClose={() => {
+                if (!marcandoCumplido) setPlazoAConfirmar(null);
+              }}
+              closeOnOverlay={!marcandoCumplido}
+            >
+              <div className="px-6 py-5">
+                <p className="text-sm text-gray-700">
+                  ¿Confirmás marcar como cumplido el plazo{' '}
+                  <strong>
+                    {plazoAConfirmar.tipoPlazo?.nombre ?? 'seleccionado'}
+                  </strong>
+                  ?
+                </p>
+
+                {/* {plazoAConfirmar.actuacionId && ( */}
+                  <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                    Una vez cumplido, no vas a poder editar ni eliminar la actuación
+                    asociada. Esta acción no se puede deshacer desde el sistema.
+                  </p>
+                {/* )} */}
+
+                {errorCumplido && (
+                  <p className="mt-3 text-sm text-red-600">{errorCumplido}</p>
+                )}
+              </div>
+
+              <Modal.Footer>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setPlazoAConfirmar(null)}
+                  disabled={marcandoCumplido}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={confirmarMarcarCumplido}
+                  disabled={marcandoCumplido}
+                >
+                  {marcandoCumplido ? 'Marcando...' : 'Sí, marcar como cumplido'}
+                </Button>
+              </Modal.Footer>
+            </Modal>
           )}
         </div>
       )}
