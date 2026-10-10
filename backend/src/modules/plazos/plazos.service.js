@@ -21,6 +21,7 @@ const {
   calcularFechaVencimiento,
   calcularLimiteConGracia,
   calcularSemaforo,
+  calcularSemaforoHoras,
 } = require('../../utils/calendarioPlazos');
 const { registrarAuditoria } = require('../../utils/auditoria');
 
@@ -34,17 +35,30 @@ function formatearFechaUtc(fecha) {
 }
 
 // ------------------------------------------------------------
+// Helper interno: fecha (sin hora) de una horaLimite.
+// PlazoJudicial.fechaVencimiento es obligatoria en el schema, también
+// para modalidad HORAS: ahí se guarda el DÍA de horaLimite (en la zona
+// horaria del servidor, la misma con la que se interpretó la hora que
+// cargó la abogada). Se arma como medianoche UTC, que es como se
+// guardan las columnas @db.Date.
+// ------------------------------------------------------------
+function fechaDeHoraLimite(horaLimite) {
+  const hora = new Date(horaLimite);
+  return new Date(Date.UTC(hora.getFullYear(), hora.getMonth(), hora.getDate()));
+}
+
+// ------------------------------------------------------------
 // Helper interno: descripción corta de un plazo para la auditoría.
 // Ej: "Contestación de demanda civil - exp. #12, vence 19/10/2026"
 // Requiere que el plazo traiga tipoPlazo incluido.
-// En modalidad HORAS no hay fechaVencimiento: se usa horaLimite.
+// En modalidad HORAS se muestra la horaLimite (fecha y hora exactas).
 // ------------------------------------------------------------
 function descripcionPlazo(plazo) {
   let vence = '—';
-  if (plazo.fechaVencimiento) {
-    vence = formatearFechaUtc(plazo.fechaVencimiento);
-  } else if (plazo.horaLimite) {
+  if (plazo.modalidad === 'HORAS' && plazo.horaLimite) {
     vence = new Date(plazo.horaLimite).toLocaleString('es-PY');
+  } else if (plazo.fechaVencimiento) {
+    vence = formatearFechaUtc(plazo.fechaVencimiento);
   }
   return `${plazo.tipoPlazo?.nombre ?? 'Plazo'} - exp. #${plazo.expedienteId}, vence ${vence}`;
 }
@@ -182,7 +196,10 @@ async function crearPlazo(expedienteId, datos, usuarioId) {
         diasCantidad,
         modalidad,
         fechaNotificacion: new Date(fechaNotificacion),
-        fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+        // HORAS: el día de horaLimite (la columna es obligatoria); resto: la
+        // fecha calculada/corregida que llega del formulario.
+        fechaVencimiento:
+          modalidad === 'HORAS' ? fechaDeHoraLimite(horaLimite) : new Date(fechaVencimiento),
         horaLimite: horaLimite ? new Date(horaLimite) : null,
         observaciones: observaciones ?? null,
       },
@@ -215,10 +232,15 @@ function conSemaforo(plazo) {
   if (plazo.estado === 'CUMPLIDO') {
     return { ...plazo, semaforo: 'CUMPLIDO' };
   }
-  // modalidad HORAS no usa fechaVencimiento para el semáforo de
-  // días — de todos modos, si algún día se quiere alertar por
-  // horas, se agrega acá. Por ahora, si no hay fechaVencimiento
-  // (caso HORAS), no se calcula semáforo de días.
+  // modalidad HORAS: el semáforo se mide en horas sobre horaLimite
+  // (VENCIDO apenas pasa ese momento exacto).
+  if (plazo.modalidad === 'HORAS') {
+    if (!plazo.horaLimite) {
+      return { ...plazo, semaforo: null };
+    }
+    return { ...plazo, semaforo: calcularSemaforoHoras({ horaLimite: plazo.horaLimite }) };
+  }
+  // Resto de modalidades: semáforo por días sobre fechaVencimiento.
   if (!plazo.fechaVencimiento) {
     return { ...plazo, semaforo: null };
   }
@@ -321,10 +343,16 @@ async function actualizarPlazo(id, datos, usuarioId) {
     (modalidad && modalidad !== plazoExistente.modalidad) ||
     (fechaNotificacion && new Date(fechaNotificacion).getTime() !== new Date(plazoExistente.fechaNotificacion).getTime());
 
+  const modalidadFinal = modalidad ?? plazoExistente.modalidad;
   let fechaVencimientoFinal = fechaVencimiento ? new Date(fechaVencimiento) : undefined;
 
+  // HORAS: la fecha de vencimiento siempre sigue al día de horaLimite
+  // (cada vez que llega una horaLimite nueva, se actualiza también).
+  if (modalidadFinal === 'HORAS' && horaLimite) {
+    fechaVencimientoFinal = fechaDeHoraLimite(horaLimite);
+  }
+
   if (cambioDatoDeOrigen && !fechaVencimiento) {
-    const modalidadFinal = modalidad ?? plazoExistente.modalidad;
 
     if (modalidadFinal === 'HORAS') {
       // En HORAS no hay cálculo: si cambiaron a esta modalidad,
@@ -334,7 +362,7 @@ async function actualizarPlazo(id, datos, usuarioId) {
         error.status = 400;
         throw error;
       }
-      fechaVencimientoFinal = null;
+      fechaVencimientoFinal = fechaDeHoraLimite(horaLimite);
     } else {
       const diasNoHabiles = modalidadFinal === 'HABILES' ? await obtenerDiasNoHabiles() : [];
       fechaVencimientoFinal = calcularFechaVencimiento({
