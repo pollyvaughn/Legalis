@@ -205,6 +205,7 @@ export default function ActuacionesSeccion({
     try {
       await api.delete(`/actuaciones/${impacto.actuacionId}`);
       onChange(actuaciones.filter((a) => a.id !== impacto.actuacionId));
+      await onPlazosActualizados?.();
       setImpacto(null);
     } catch (err) {
       setErrorEliminar(err.response?.data?.error || 'No se pudo eliminar la actuación');
@@ -469,8 +470,8 @@ export default function ActuacionesSeccion({
                 {impacto.plazosPendientes?.length > 0 && (
                   <div className="mt-3 rounded-lg bg-amber-50 p-3">
                     <p className="text-sm font-medium text-amber-800">
-                      Se eliminarán también estos {impacto.plazosPendientes.length} plazo
-                      {impacto.plazosPendientes.length === 1 ? '' : 's'} pendiente
+                      Se eliminarán también: {impacto.plazosPendientes.length} plazo(s)
+                      {impacto.plazosPendientes.lengtxFRh === 1 ? '' : 's'} pendiente(s)
                       {impacto.plazosPendientes.length === 1 ? '' : 's'}:
                     </p>
                     <ul className="mt-2 space-y-1">
