@@ -434,6 +434,7 @@ useEffect(() => {
         actuaciones={expediente.actuaciones || []}
         actuacionIdParaPlazo={actuacionIdParaPlazo}
         onActuacionIdParaPlazoChange={setActuacionIdParaPlazo}
+        fuero={expediente.fuero}
       />
       </div>
 

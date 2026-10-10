@@ -21,6 +21,11 @@
 //   - Eliminar pide confirmación.
 //   - Un plazo CUMPLIDO queda bloqueado: no muestra los botones
 //     y, además, el backend lo rechaza con 400.
+//
+// FUERO PENAL (RN-19): si el expediente es penal, el formulario
+// propone la modalidad CORRIDOS por defecto (el sistema calcula en
+// días corridos y sin plazo de gracia). Se puede cambiar a mano.
+// El fuero llega por la prop 'fuero' desde ExpedienteDetailPage.
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -64,8 +69,20 @@ export default function PlazosSeccion({
   actuaciones,
   actuacionIdParaPlazo,
   onActuacionIdParaPlazoChange,
+  fuero, // fuero del expediente (ej: 'PENAL'), para la modalidad por defecto
 }) {
   const { esAbogado } = useAuth();
+
+  // RN-19: en fuero Penal la modalidad arranca en CORRIDOS; en el resto, HABILES.
+  const esPenal = fuero === 'PENAL';
+  const modalidadInicial = esPenal ? 'CORRIDOS' : 'HABILES';
+
+  // Modalidad que se precarga al elegir un tipo de plazo: la del tipo,
+  // salvo que el expediente sea penal y el tipo diga HABILES (los tipos
+  // del catálogo se cargan pensando en civil/laboral) → CORRIDOS.
+  function modalidadParaTipo(tipo) {
+    return esPenal && tipo.modalidadDefault === 'HABILES' ? 'CORRIDOS' : tipo.modalidadDefault;
+  }
 
   const [tiposPlazo, setTiposPlazo] = useState([]);
   const [cargandoTipos, setCargandoTipos] = useState(true);
@@ -75,7 +92,7 @@ export default function PlazosSeccion({
   const [tipoPlazoId, setTipoPlazoId] = useState('');
   const [fechaNotificacion, setFechaNotificacion] = useState('');
   const [diasCantidad, setDiasCantidad] = useState('');
-  const [modalidad, setModalidad] = useState('HABILES');
+  const [modalidad, setModalidad] = useState(modalidadInicial);
   const [horaLimite, setHoraLimite] = useState('');
   const [observaciones, setObservaciones] = useState('');
 
@@ -146,17 +163,24 @@ export default function PlazosSeccion({
     const tipo = tiposPlazo.find((t) => String(t.id) === String(id));
     if (tipo) {
       setDiasCantidad(String(tipo.diasDefault));
-      setModalidad(tipo.modalidadDefault);
+      setModalidad(modalidadParaTipo(tipo));
     }
     // Cambiar el tipo invalida cualquier cálculo anterior.
     setSugerencia(null);
+  }
+
+  // Abre el formulario de alta. Si todavía no se eligió tipo, deja la
+  // modalidad inicial vigente (por si el fuero del expediente cambió).
+  function abrirFormAlta() {
+    if (!tipoPlazoId) setModalidad(modalidadInicial);
+    setMostrarForm(true);
   }
 
   function limpiarForm() {
     setTipoPlazoId('');
     setFechaNotificacion('');
     setDiasCantidad('');
-    setModalidad('HABILES');
+    setModalidad(modalidadInicial);
     setHoraLimite('');
     setObservaciones('');
     setSugerencia(null);
@@ -301,7 +325,7 @@ export default function PlazosSeccion({
       ...formEdicion,
       tipoPlazoId: id,
       ...(tipo
-        ? { diasCantidad: String(tipo.diasDefault), modalidad: tipo.modalidadDefault }
+        ? { diasCantidad: String(tipo.diasDefault), modalidad: modalidadParaTipo(tipo) }
         : {}),
     };
     setFormEdicion(siguiente);
@@ -438,7 +462,7 @@ export default function PlazosSeccion({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">Plazos judiciales</h2>
         {esAbogado && !mostrarForm && (
-          <Button size="sm" onClick={() => setMostrarForm(true)}>
+          <Button size="sm" onClick={abrirFormAlta}>
             + Nuevo plazo
           </Button>
         )}
@@ -558,6 +582,13 @@ export default function PlazosSeccion({
                   opciones={OPCIONES_MODALIDAD}
                 />
               </div>
+
+              {esPenal && (
+                <p className="text-xs text-gray-500">
+                  Expediente penal: se propone días corridos y sin plazo de gracia (RN-19).
+                  Podés cambiar la modalidad si hace falta.
+                </p>
+              )}
 
               {/* Modalidad HORAS: carga directa, sin cálculo (RN-19) */}
               {modalidad === 'HORAS' ? (
@@ -745,6 +776,12 @@ export default function PlazosSeccion({
                   opciones={OPCIONES_MODALIDAD}
                 />
               </div>
+
+              {esPenal && (
+                <p className="text-xs text-gray-500">
+                  Expediente penal: se propone días corridos y sin plazo de gracia.
+                </p>
+              )}
 
               {/* HORAS: carga directa. Resto: fecha editable + Recalcular */}
               {formEdicion.modalidad === 'HORAS' ? (
