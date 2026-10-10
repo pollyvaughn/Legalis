@@ -4,14 +4,28 @@
 // días hábiles). Mismo patrón que TipoTramite (Módulo 1.3):
 // si tiene PlazoJudicial asociados, no se elimina (se inactiva);
 // si nunca se usó, se puede eliminar libremente.
+//
+// AUDITORÍA (RN-41): crear, editar, inactivar/reactivar y
+// eliminar quedan registrados, dentro de la misma transacción
+// que el cambio (mismo criterio que tipos-tramite.service.js).
 // ============================================================
 
 const prisma = require('../../config/database');
+const { registrarAuditoria } = require('../../utils/auditoria');
 
 // ------------------------------------------------------------
-// Crear tipo de plazo
+// Helper interno: descripción corta de un tipo de plazo para la
+// auditoría. Ej: "Contestación de demanda civil (CIVIL_COMERCIAL, 18 HABILES)"
 // ------------------------------------------------------------
-async function crear(datos) {
+function descripcionTipoPlazo(tipo) {
+  return `${tipo.nombre} (${tipo.fuero}, ${tipo.diasDefault} ${tipo.modalidadDefault})`;
+}
+
+// ------------------------------------------------------------
+// Crear tipo de plazo (+ auditoría CREAR)
+// Ahora recibe usuarioId (2do parámetro) para la auditoría.
+// ------------------------------------------------------------
+async function crear(datos, usuarioId) {
   const { nombre, fuero, diasDefault, modalidadDefault } = datos;
 
   // @@unique([nombre, fuero]) en el schema ya lo protege a nivel
@@ -26,13 +40,25 @@ async function crear(datos) {
     throw error;
   }
 
-  return prisma.tipoPlazo.create({
-    data: {
-      nombre,
-      fuero: fuero ?? 'TODOS',
-      diasDefault,
-      modalidadDefault: modalidadDefault ?? 'HABILES',
-    },
+  return prisma.$transaction(async (tx) => {
+    const tipo = await tx.tipoPlazo.create({
+      data: {
+        nombre,
+        fuero: fuero ?? 'TODOS',
+        diasDefault,
+        modalidadDefault: modalidadDefault ?? 'HABILES',
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'TipoPlazo',
+      entidadId: tipo.id,
+      detalle: descripcionTipoPlazo(tipo),
+    });
+
+    return tipo;
   });
 }
 
@@ -74,38 +100,68 @@ async function obtenerPorId(id) {
 }
 
 // ------------------------------------------------------------
-// Editar tipo de plazo
+// Editar tipo de plazo (+ auditoría EDITAR)
 // Editar diasDefault/modalidadDefault NO afecta a los plazos ya
 // creados con ese tipo (esos valores se copiaron al crear el
 // PlazoJudicial — ver comentario en el schema). Solo cambia la
 // sugerencia para plazos futuros.
+// Ahora recibe usuarioId (3er parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function actualizar(id, datos) {
+async function actualizar(id, datos, usuarioId) {
   await obtenerPorId(id); // valida existencia (404 si no está)
 
   const { nombre, fuero, diasDefault, modalidadDefault } = datos;
 
-  return prisma.tipoPlazo.update({
-    where: { id },
-    data: { nombre, fuero, diasDefault, modalidadDefault },
+  return prisma.$transaction(async (tx) => {
+    const tipo = await tx.tipoPlazo.update({
+      where: { id },
+      data: { nombre, fuero, diasDefault, modalidadDefault },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'TipoPlazo',
+      entidadId: id,
+      detalle: descripcionTipoPlazo(tipo),
+    });
+
+    return tipo;
   });
 }
 
 // ------------------------------------------------------------
-// Inactivar / reactivar
+// Inactivar / reactivar (+ auditoría INACTIVAR o REACTIVAR)
+// Ahora recibe usuarioId (3er parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function cambiarActivo(id, activo) {
+async function cambiarActivo(id, activo, usuarioId) {
   await obtenerPorId(id); // valida existencia (404 si no está)
-  return prisma.tipoPlazo.update({ where: { id }, data: { activo } });
+
+  return prisma.$transaction(async (tx) => {
+    const tipo = await tx.tipoPlazo.update({ where: { id }, data: { activo } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: activo ? 'REACTIVAR' : 'INACTIVAR',
+      entidad: 'TipoPlazo',
+      entidadId: id,
+      detalle: descripcionTipoPlazo(tipo),
+    });
+
+    return tipo;
+  });
 }
 
 // ------------------------------------------------------------
-// Eliminar tipo de plazo
+// Eliminar tipo de plazo (+ auditoría ELIMINAR)
 // Solo si nunca se usó (sin PlazoJudicial asociados). Si tiene
 // uso, se debe inactivar en vez de eliminar.
+// La descripción se arma ANTES de borrar (después ya no se puede
+// leer de la base).
+// Ahora recibe usuarioId (2do parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function eliminar(id) {
-  await obtenerPorId(id); // valida existencia (404 si no está)
+async function eliminar(id, usuarioId) {
+  const tipoPlazo = await obtenerPorId(id); // valida existencia (404 si no está)
 
   const cantidadPlazos = await prisma.plazoJudicial.count({
     where: { tipoPlazoId: id },
@@ -118,7 +174,17 @@ async function eliminar(id) {
     throw error;
   }
 
-  await prisma.tipoPlazo.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.tipoPlazo.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'TipoPlazo',
+      entidadId: id,
+      detalle: descripcionTipoPlazo(tipoPlazo),
+    });
+  });
 }
 
 module.exports = {

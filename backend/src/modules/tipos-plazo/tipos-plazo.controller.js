@@ -1,5 +1,7 @@
 // ============================================================
 // CONTROLLER: TipoPlazo
+// req.usuario.id viene de verificarToken y se pasa al service
+// en cada operación que escribe, para la auditoría.
 // ============================================================
 
 const tipoPlazoService = require('./tipos-plazo.service');
@@ -13,12 +15,15 @@ async function crear(req, res, next) {
       return res.status(400).json({ error: 'nombre y diasDefault son obligatorios.' });
     }
 
-    const tipoPlazo = await tipoPlazoService.crear({
-      nombre,
-      fuero,
-      diasDefault: Number(diasDefault),
-      modalidadDefault,
-    });
+    const tipoPlazo = await tipoPlazoService.crear(
+      {
+        nombre,
+        fuero,
+        diasDefault: Number(diasDefault),
+        modalidadDefault,
+      },
+      req.usuario.id // auditoría
+    );
 
     return res.status(201).json(tipoPlazo);
   } catch (error) {
@@ -54,12 +59,16 @@ async function actualizar(req, res, next) {
     const id = Number(req.params.id);
     const { nombre, fuero, diasDefault, modalidadDefault } = req.body;
 
-    const tipoPlazo = await tipoPlazoService.actualizar(id, {
-      nombre,
-      fuero,
-      diasDefault: diasDefault ? Number(diasDefault) : undefined,
-      modalidadDefault,
-    });
+    const tipoPlazo = await tipoPlazoService.actualizar(
+      id,
+      {
+        nombre,
+        fuero,
+        diasDefault: diasDefault ? Number(diasDefault) : undefined,
+        modalidadDefault,
+      },
+      req.usuario.id // auditoría
+    );
 
     return res.json(tipoPlazo);
   } catch (error) {
@@ -72,7 +81,7 @@ async function cambiarActivo(req, res, next) {
   try {
     const id = Number(req.params.id);
     const { activo } = req.body;
-    const tipoPlazo = await tipoPlazoService.cambiarActivo(id, Boolean(activo));
+    const tipoPlazo = await tipoPlazoService.cambiarActivo(id, Boolean(activo), req.usuario.id); // auditoría
     return res.json(tipoPlazo);
   } catch (error) {
     return next(error);
@@ -83,7 +92,7 @@ async function cambiarActivo(req, res, next) {
 async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await tipoPlazoService.eliminar(id);
+    await tipoPlazoService.eliminar(id, req.usuario.id); // auditoría
     return res.status(204).send();
   } catch (error) {
     return next(error);

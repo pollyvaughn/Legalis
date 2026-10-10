@@ -4,7 +4,17 @@
 // de backend/src/utils/calendarioPlazos.js.
 // El service es quien sabe hablar con Prisma; las funciones de
 // cálculo no saben nada de la base de datos (así se testean solas).
-// ============================================================
+//
+// AUDITORÍA (RN-41): crear, editar, marcar cumplido y eliminar
+// registran quién lo hizo, dentro de la MISMA transacción que el
+// cambio. "Marcar cumplido" se registra como EDITAR (no hay una
+// acción propia en el enum) y se aclara en el detalle.
+//
+// BLOQUEO DE CUMPLIDOS: un plazo CUMPLIDO ya es un hecho cerrado
+// (RN-24). No se puede editar, eliminar ni volver a marcar como
+// cumplido: el backend lo rechaza con 400 aunque el frontend ya
+// no muestre los botones.
+// ============================================
 
 const prisma = require('../../config/database');
 const {
@@ -12,6 +22,32 @@ const {
   calcularLimiteConGracia,
   calcularSemaforo,
 } = require('../../utils/calendarioPlazos');
+const { registrarAuditoria } = require('../../utils/auditoria');
+
+// ------------------------------------------------------------
+// Helper interno: Date (UTC, de una columna @db.Date) -> "DD/MM/AAAA"
+// Se arma desde el ISO para que no se corra un día por la zona horaria.
+// ------------------------------------------------------------
+function formatearFechaUtc(fecha) {
+  const [anio, mes, dia] = new Date(fecha).toISOString().slice(0, 10).split('-');
+  return `${dia}/${mes}/${anio}`;
+}
+
+// ------------------------------------------------------------
+// Helper interno: descripción corta de un plazo para la auditoría.
+// Ej: "Contestación de demanda civil - exp. #12, vence 19/10/2026"
+// Requiere que el plazo traiga tipoPlazo incluido.
+// En modalidad HORAS no hay fechaVencimiento: se usa horaLimite.
+// ------------------------------------------------------------
+function descripcionPlazo(plazo) {
+  let vence = '—';
+  if (plazo.fechaVencimiento) {
+    vence = formatearFechaUtc(plazo.fechaVencimiento);
+  } else if (plazo.horaLimite) {
+    vence = new Date(plazo.horaLimite).toLocaleString('es-PY');
+  }
+  return `${plazo.tipoPlazo?.nombre ?? 'Plazo'} - exp. #${plazo.expedienteId}, vence ${vence}`;
+}
 
 // ------------------------------------------------------------
 // Helper interno: trae los DiaNoHabil vigentes para el cálculo.
@@ -45,9 +81,23 @@ async function obtenerExpedienteOFallar(expedienteId) {
 }
 
 // ------------------------------------------------------------
+// Helper interno: rechaza (400) cualquier cambio sobre un plazo
+// ya CUMPLIDO. 'accion' completa el mensaje: "editar", "eliminar".
+// Recibe el plazo ya traído de la base (con su campo estado).
+// ------------------------------------------------------------
+function exigirPlazoPendiente(plazo, accion) {
+  if (plazo.estado === 'CUMPLIDO') {
+    const error = new Error(`No se puede ${accion} un plazo cumplido.`);
+    error.status = 400;
+    throw error;
+  }
+}
+
+// ------------------------------------------------------------
 // CALCULAR (sin guardar nada) — RN-20: "el sistema propone la
 // fecha y ella puede corregirla". Se llama ANTES de crear el
 // PlazoJudicial, para mostrar la sugerencia en el formulario.
+// No se audita: no modifica datos.
 //
 // Devuelve: { fechaVencimiento, limiteConGracia (o null si es
 // fuero Penal, RN-19) }
@@ -79,13 +129,14 @@ async function calcularSugerencia(expedienteId, { fechaNotificacion, diasCantida
 }
 
 // ------------------------------------------------------------
-// CREAR PlazoJudicial
+// CREAR PlazoJudicial (+ auditoría CREAR)
 // A esta altura fechaVencimiento ya viene decidida (calculada
 // por el endpoint de arriba, y potencialmente corregida por la
 // abogada en el formulario) — el service NO vuelve a calcularla,
 // solo valida y guarda lo que llega.
+// Ahora recibe usuarioId (3er parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function crearPlazo(expedienteId, datos) {
+async function crearPlazo(expedienteId, datos, usuarioId) {
   const {
     actuacionId,
     tipoPlazoId,
@@ -121,23 +172,36 @@ async function crearPlazo(expedienteId, datos) {
     throw error;
   }
 
-  const plazo = await prisma.plazoJudicial.create({
-    data: {
-      expedienteId,
-      actuacionId: actuacionId ?? null,
-      tipoPlazoId,
-      diasCantidad,
-      modalidad,
-      fechaNotificacion: new Date(fechaNotificacion),
-      fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
-      horaLimite: horaLimite ? new Date(horaLimite) : null,
-      observaciones: observaciones ?? null,
-    },
-    include: {
-      tipoPlazo: { select: { id: true, nombre: true } },
-    },
+  // Transacción: crear el plazo + registrar la auditoría, todo o nada
+  const plazo = await prisma.$transaction(async (tx) => {
+    const nuevo = await tx.plazoJudicial.create({
+      data: {
+        expedienteId,
+        actuacionId: actuacionId ?? null,
+        tipoPlazoId,
+        diasCantidad,
+        modalidad,
+        fechaNotificacion: new Date(fechaNotificacion),
+        fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
+        horaLimite: horaLimite ? new Date(horaLimite) : null,
+        observaciones: observaciones ?? null,
+      },
+      include: {
+        tipoPlazo: { select: { id: true, nombre: true } },
+      },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'CREAR',
+      entidad: 'PlazoJudicial',
+      entidadId: nuevo.id,
+      detalle: descripcionPlazo(nuevo),
+    });
+
+    return nuevo;
   });
-  
+
   return conSemaforo(plazo);
 }
 
@@ -224,7 +288,7 @@ async function obtenerPorId(id) {
 }
 
 // ------------------------------------------------------------
-// Editar plazo
+// Editar plazo (+ auditoría EDITAR)
 // A diferencia de la primera versión, ahora SÍ permite cambiar
 // tipoPlazoId, diasCantidad, modalidad y fechaNotificacion — si
 // alguno de esos cambia, se recalcula fechaVencimiento (y el
@@ -233,9 +297,11 @@ async function obtenerPorId(id) {
 // envía una fechaVencimiento corregida a mano (sin tocar los
 // datos de origen), se respeta esa corrección manual y NO se
 // recalcula (RN-20: "ella puede corregirla").
+// Ahora recibe usuarioId (3er parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function actualizarPlazo(id, datos) {
+async function actualizarPlazo(id, datos, usuarioId) {
   const plazoExistente = await obtenerPorId(id); // valida existencia (404 si no está)
+  exigirPlazoPendiente(plazoExistente, 'editar'); // un cumplido queda bloqueado
 
   const {
     tipoPlazoId,
@@ -280,44 +346,101 @@ async function actualizarPlazo(id, datos) {
     }
   }
 
-  return prisma.plazoJudicial.update({
-    where: { id },
-    data: {
-      tipoPlazoId: tipoPlazoId ?? undefined,
-      diasCantidad: diasCantidad ?? undefined,
-      modalidad: modalidad ?? undefined,
-      fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : undefined,
-      fechaVencimiento: fechaVencimientoFinal,
-      horaLimite: horaLimite ? new Date(horaLimite) : undefined,
-      observaciones,
-    },
+  // Transacción: actualizar el plazo + registrar la auditoría, todo o nada
+  const plazoActualizado = await prisma.$transaction(async (tx) => {
+    const actualizado = await tx.plazoJudicial.update({
+      where: { id },
+      data: {
+        tipoPlazoId: tipoPlazoId ?? undefined,
+        diasCantidad: diasCantidad ?? undefined,
+        modalidad: modalidad ?? undefined,
+        fechaNotificacion: fechaNotificacion ? new Date(fechaNotificacion) : undefined,
+        fechaVencimiento: fechaVencimientoFinal,
+        horaLimite: horaLimite ? new Date(horaLimite) : undefined,
+        observaciones,
+      },
+      // tipoPlazo incluido para poder describir el plazo en la auditoría
+      include: { tipoPlazo: { select: { id: true, nombre: true } } },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'PlazoJudicial',
+      entidadId: id,
+      detalle: descripcionPlazo(actualizado),
+    });
+
+    return actualizado;
   });
+
+  // Se devuelve con el semáforo ya calculado: el frontend reemplaza
+  // el plazo en su lista sin tener que volver a pedir todo.
+  return conSemaforo(plazoActualizado);
 }
 
 // ------------------------------------------------------------
 // Marcar como cumplido (RN-24: retira la alerta activa)
+// Auditoría: se registra como EDITAR (no hay acción propia en el
+// enum) y el detalle empieza con "Marcado como cumplido".
+// Ahora recibe usuarioId (2do parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function marcarCumplido(id) {
-  await obtenerPorId(id); // valida existencia (404 si no está)
+async function marcarCumplido(id, usuarioId) {
+  const plazoExistente = await obtenerPorId(id); // valida existencia (404 si no está)
 
-  return prisma.plazoJudicial.update({
-    where: { id },
-    data: {
-      estado: 'CUMPLIDO',
-      fechaCumplido: new Date(),
-    },
+  // No se vuelve a marcar: pisaría fechaCumplido con una fecha posterior.
+  if (plazoExistente.estado === 'CUMPLIDO') {
+    const error = new Error('El plazo ya está marcado como cumplido.');
+    error.status = 400;
+    throw error;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const cumplido = await tx.plazoJudicial.update({
+      where: { id },
+      data: {
+        estado: 'CUMPLIDO',
+        fechaCumplido: new Date(),
+      },
+      include: { tipoPlazo: { select: { id: true, nombre: true } } },
+    });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'EDITAR',
+      entidad: 'PlazoJudicial',
+      entidadId: id,
+      detalle: `Marcado como cumplido: ${descripcionPlazo(cumplido)}`,
+    });
+
+    return cumplido;
   });
 }
 
 // ------------------------------------------------------------
-// Eliminar plazo
+// Eliminar plazo (+ auditoría ELIMINAR)
 // Hard-delete: cargar un plazo por error (tipo, expediente o
 // cantidad de días equivocados) es un error de tipeo, no un
 // hecho procesal a conservar en el historial.
+// La descripción se arma ANTES de borrar (después ya no se puede
+// leer de la base); obtenerPorId ya trae el tipoPlazo incluido.
+// Ahora recibe usuarioId (2do parámetro) para la auditoría.
 // ------------------------------------------------------------
-async function eliminarPlazo(id) {
-  await obtenerPorId(id); // valida existencia (404 si no está)
-  await prisma.plazoJudicial.delete({ where: { id } });
+async function eliminarPlazo(id, usuarioId) {
+  const plazo = await obtenerPorId(id); // valida existencia (404 si no está)
+  exigirPlazoPendiente(plazo, 'eliminar'); // un cumplido queda bloqueado
+
+  await prisma.$transaction(async (tx) => {
+    await tx.plazoJudicial.delete({ where: { id } });
+
+    await registrarAuditoria(tx, {
+      usuarioId,
+      accion: 'ELIMINAR',
+      entidad: 'PlazoJudicial',
+      entidadId: id,
+      detalle: descripcionPlazo(plazo),
+    });
+  });
 }
 
 module.exports = {

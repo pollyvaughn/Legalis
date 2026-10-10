@@ -1,5 +1,7 @@
 // ============================================================
 // CONTROLLER: DiaNoHabil
+// req.usuario.id viene de verificarToken y se pasa al service
+// en cada operación que escribe, para la auditoría.
 // ============================================================
 
 const diaNoHabilService = require('./dia-no-habil.service');
@@ -13,7 +15,10 @@ async function crear(req, res, next) {
       return res.status(400).json({ error: 'fechaDesde y descripcion son obligatorios.' });
     }
 
-    const diaNoHabil = await diaNoHabilService.crear({ fechaDesde, fechaHasta, descripcion });
+    const diaNoHabil = await diaNoHabilService.crear(
+      { fechaDesde, fechaHasta, descripcion },
+      req.usuario.id // auditoría
+    );
     return res.status(201).json(diaNoHabil);
   } catch (error) {
     return next(error);
@@ -47,11 +52,11 @@ async function actualizar(req, res, next) {
     const id = Number(req.params.id);
     const { fechaDesde, fechaHasta, descripcion } = req.body;
 
-    const diaNoHabil = await diaNoHabilService.actualizar(id, {
-      fechaDesde,
-      fechaHasta,
-      descripcion,
-    });
+    const diaNoHabil = await diaNoHabilService.actualizar(
+      id,
+      { fechaDesde, fechaHasta, descripcion },
+      req.usuario.id // auditoría
+    );
 
     return res.json(diaNoHabil);
   } catch (error) {
@@ -63,7 +68,7 @@ async function actualizar(req, res, next) {
 async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await diaNoHabilService.eliminar(id);
+    await diaNoHabilService.eliminar(id, req.usuario.id); // auditoría
     return res.status(204).send();
   } catch (error) {
     return next(error);

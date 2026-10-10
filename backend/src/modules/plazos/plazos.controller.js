@@ -3,7 +3,11 @@
 // Traduce req/res de Express hacia/desde el service. No contiene
 // lógica de negocio — solo parseo de params/query/body y manejo
 // de errores.
-// ============================================================
+//
+// req.usuario.id viene del middleware verificarToken y se pasa a
+// cada función del service que escribe datos, para que quede
+// registrado en la auditoría quién hizo cada acción.
+// ============================================
 
 const plazoService = require('./plazos.service');
 
@@ -54,16 +58,20 @@ async function crear(req, res, next) {
       });
     }
 
-    const plazo = await plazoService.crearPlazo(expedienteId, {
-      actuacionId: actuacionId ? Number(actuacionId) : null,
-      tipoPlazoId: Number(tipoPlazoId),
-      diasCantidad: Number(diasCantidad),
-      modalidad,
-      fechaNotificacion,
-      fechaVencimiento,
-      horaLimite,
-      observaciones,
-    });
+    const plazo = await plazoService.crearPlazo(
+      expedienteId,
+      {
+        actuacionId: actuacionId ? Number(actuacionId) : null,
+        tipoPlazoId: Number(tipoPlazoId),
+        diasCantidad: Number(diasCantidad),
+        modalidad,
+        fechaNotificacion,
+        fechaVencimiento,
+        horaLimite,
+        observaciones,
+      },
+      req.usuario.id // auditoría: quién lo creó
+    );
 
     return res.status(201).json(plazo);
   } catch (error) {
@@ -122,15 +130,19 @@ async function actualizar(req, res, next) {
       observaciones,
     } = req.body;
 
-    const plazo = await plazoService.actualizarPlazo(id, {
-      tipoPlazoId: tipoPlazoId ? Number(tipoPlazoId) : undefined,
-      diasCantidad: diasCantidad ? Number(diasCantidad) : undefined,
-      modalidad,
-      fechaNotificacion,
-      fechaVencimiento,
-      horaLimite,
-      observaciones,
-    });
+    const plazo = await plazoService.actualizarPlazo(
+      id,
+      {
+        tipoPlazoId: tipoPlazoId ? Number(tipoPlazoId) : undefined,
+        diasCantidad: diasCantidad ? Number(diasCantidad) : undefined,
+        modalidad,
+        fechaNotificacion,
+        fechaVencimiento,
+        horaLimite,
+        observaciones,
+      },
+      req.usuario.id // auditoría: quién lo editó
+    );
 
     return res.json(plazo);
   } catch (error) {
@@ -142,7 +154,7 @@ async function actualizar(req, res, next) {
 async function marcarCumplido(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const plazo = await plazoService.marcarCumplido(id);
+    const plazo = await plazoService.marcarCumplido(id, req.usuario.id); // auditoría
     return res.json(plazo);
   } catch (error) {
     return next(error);
@@ -153,7 +165,7 @@ async function marcarCumplido(req, res, next) {
 async function eliminar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await plazoService.eliminarPlazo(id);
+    await plazoService.eliminarPlazo(id, req.usuario.id); // auditoría
     return res.status(204).send();
   } catch (error) {
     return next(error);
