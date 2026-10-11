@@ -5,13 +5,30 @@
 // vista semanal/diaria interactiva ni superposición de eventos,
 // solo ver qué días tienen vencimientos y entrar al detalle).
 //
-// Recibe TODOS los plazos (de cualquier mes) y el mes/año a
-// mostrar; agrupa internamente por día. Flechas < > cambian de mes.
+// Recibe los EVENTOS (plazos judiciales + vencimientos de RUC, ya
+// normalizados, ver eventosCalendario.js) de cualquier mes; agrupa
+// internamente por día. Flechas < > cambian de mes.
+//
+// Cada día con vencimientos muestra hasta MAX_MARCAS figuras
+// (círculo = plazo judicial, cuadrado = RUC; color = semáforo). Si
+// hay más, aparece un "+N" del color del vencimiento más urgente del
+// día. Al hacer clic en un día se abre, debajo de la grilla, el panel
+// con TODOS los vencimientos de ese día.
 // ============================================================
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ETIQUETA_SEMAFORO } from '../../constants/semaforoPlazos';
+import FilaEvento from './FilaEvento';
+import MarcaEvento, { COLOR_MARCA } from './MarcaEvento';
+import {
+  TIPO_PLAZO,
+  TIPO_RUC,
+  TIPOS_EVENTO,
+  fechaCorta,
+  ordenarPorUrgencia,
+  peorSemaforo,
+} from './eventosCalendario';
 
 const NOMBRES_MES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -19,16 +36,8 @@ const NOMBRES_MES = [
 ];
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-// Colores del puntito según semáforo — mismo mapeo que Badge, pero
-// como fondo sólido (bg-*-500) porque acá es un punto chico, no
-// una pastilla con texto adentro.
-const COLOR_PUNTO = {
-  VERDE: 'bg-green-500',
-  AMARILLO: 'bg-yellow-500',
-  ROJO: 'bg-orange-500',
-  VENCIDO: 'bg-red-500',
-  CUMPLIDO: 'bg-gray-400',
-};
+// Cuántas figuras caben en la celda de un día antes de pasar a "+N"
+const MAX_MARCAS = 4;
 
 // Arma la grilla de un mes: array de semanas, cada semana un array
 // de 7 días (número de día o null si es relleno antes/después del mes).
@@ -51,32 +60,21 @@ function armarGrilla(anio, mes) {
   return semanas;
 }
 
-export default function VistaMes({ plazos }) {
-  const navigate = useNavigate();
+export default function VistaMes({ eventos }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth()); // 0-11
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null); // número de día o null
+  const panelRef = useRef(null);
 
-  // Agrupa los plazos por día del mes actual (clave: día del mes,
-  // 1-31). Solo considera los que caen en el anio/mes mostrados.
-  const plazosPorDia = {};
-  for (const plazo of plazos) {
-    if (plazo.fechaVencimiento) {
-      const [anioFecha, mesFecha, dia] = plazo.fechaVencimiento
-        .slice(0, 10)
-        .split('-')
-        .map(Number);
-  
-      if (anioFecha === anio && mesFecha - 1 === mes) {
-        (plazosPorDia[dia] ||= []).push(plazo);
-      }
-    } else if (plazo.horaLimite) {
-      const fechaHora = new Date(plazo.horaLimite);
-  
-      if (fechaHora.getFullYear() === anio && fechaHora.getMonth() === mes) {
-        const dia = fechaHora.getDate();
-        (plazosPorDia[dia] ||= []).push(plazo);
-      }
+  // Agrupa los eventos por día del mes mostrado (clave: día del mes,
+  // 1-31), ya ordenados por urgencia. Solo considera los del anio/mes
+  // actual. 'fecha' es 'AAAA-MM-DD'.
+  const eventosPorDia = {};
+  for (const evento of ordenarPorUrgencia(eventos)) {
+    const [anioFecha, mesFecha, dia] = evento.fecha.split('-').map(Number);
+    if (anioFecha === anio && mesFecha - 1 === mes) {
+      (eventosPorDia[dia] ||= []).push(evento);
     }
   }
 
@@ -84,11 +82,26 @@ export default function VistaMes({ plazos }) {
     const nuevaFecha = new Date(anio, mes + delta, 1);
     setAnio(nuevaFecha.getFullYear());
     setMes(nuevaFecha.getMonth());
+    setDiaSeleccionado(null); // el panel era de otro mes
   }
+
+  // Al elegir un día, baja hasta el panel para que se vea sin tener
+  // que scrollear a mano.
+  useEffect(() => {
+    if (diaSeleccionado && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [diaSeleccionado]);
 
   const semanas = armarGrilla(anio, mes);
   const esHoy = (dia) =>
     dia === hoy.getDate() && mes === hoy.getMonth() && anio === hoy.getFullYear();
+
+  // Fecha 'AAAA-MM-DD' del día seleccionado (para el título del panel)
+  const fechaSeleccionada = diaSeleccionado
+    ? `${anio}-${String(mes + 1).padStart(2, '0')}-${String(diaSeleccionado).padStart(2, '0')}`
+    : null;
+  const eventosDelDiaSeleccionado = diaSeleccionado ? eventosPorDia[diaSeleccionado] || [] : [];
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6">
@@ -99,12 +112,14 @@ export default function VistaMes({ plazos }) {
         <div className="flex gap-1">
           <button
             onClick={() => cambiarMes(-1)}
+            aria-label="Mes anterior"
             className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           >
             <ChevronLeft size={18} strokeWidth={1.75} />
           </button>
           <button
             onClick={() => cambiarMes(1)}
+            aria-label="Mes siguiente"
             className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           >
             <ChevronRight size={18} strokeWidth={1.75} />
@@ -124,40 +139,107 @@ export default function VistaMes({ plazos }) {
 
         {semanas.map((semana, i) =>
           semana.map((dia, j) => {
-            const plazosDelDia = dia ? plazosPorDia[dia] || [] : [];
-            return (
-              <div
-                key={`${i}-${j}`}
-                className={`min-h-20 bg-white p-2 ${dia && esHoy(dia) ? 'bg-gray-900' : ''}`}
-              >
-                {dia && (
-                  <>
-                    <p
-                      className={`text-sm ${
-                        esHoy(dia) ? 'font-semibold text-white' : 'text-gray-700'
-                      }`}
-                    >
-                      {dia}
-                    </p>
-                    {plazosDelDia.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {plazosDelDia.map((plazo) => (
-                          <button
-                            key={plazo.id}
-                            title={`${plazo.tipoPlazo?.nombre} · ${plazo.expediente?.caratula}`}
-                            onClick={() => navigate(`/expedientes/${plazo.expediente.id}`)}
-                            className={`h-2 w-2 rounded-full ${COLOR_PUNTO[plazo.semaforo] || 'bg-gray-400'}`}
-                          />
-                        ))}
-                      </div>
+            const eventosDelDia = dia ? eventosPorDia[dia] || [] : [];
+            const hayEventos = eventosDelDia.length > 0;
+            const seleccionado = dia && dia === diaSeleccionado;
+
+            // Contenido de la celda: número de día + figuras
+            const contenido = dia && (
+              <>
+                <p
+                  className={`text-sm ${
+                    esHoy(dia) ? 'font-semibold text-white' : 'text-gray-700'
+                  }`}
+                >
+                  {dia}
+                </p>
+                {hayEventos && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {eventosDelDia.slice(0, MAX_MARCAS).map((evento) => (
+                      <MarcaEvento key={evento.clave} tipo={evento.tipo} semaforo={evento.semaforo} />
+                    ))}
+                    {eventosDelDia.length > MAX_MARCAS && (
+                      <span
+                        className={`rounded-full px-1.5 text-[10px] font-semibold leading-4 text-white ${
+                          COLOR_MARCA[peorSemaforo(eventosDelDia)] || 'bg-gray-400'
+                        }`}
+                      >
+                        +{eventosDelDia.length - MAX_MARCAS}
+                      </span>
                     )}
-                  </>
+                  </div>
                 )}
+              </>
+            );
+
+            const clasesBase = `min-h-20 p-2 text-left ${esHoy(dia) ? 'bg-gray-900' : 'bg-white'}`;
+
+            // Días con vencimientos: la celda entera es un botón (blanco
+            // grande para tocar). El resto, una celda común.
+            return hayEventos ? (
+              <button
+                key={`${i}-${j}`}
+                type="button"
+                onClick={() => setDiaSeleccionado(seleccionado ? null : dia)}
+                aria-label={`${dia} de ${NOMBRES_MES[mes]}: ${eventosDelDia.length} vencimiento(s)`}
+                className={`${clasesBase} block w-full cursor-pointer ${
+                  esHoy(dia) ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                } ${seleccionado ? 'ring-2 ring-inset ring-sky-500' : ''}`}
+              >
+                {contenido}
+              </button>
+            ) : (
+              <div key={`${i}-${j}`} className={clasesBase}>
+                {contenido}
               </div>
             );
           })
         )}
       </div>
+
+      {/* --- Leyenda: forma = tipo, color = urgencia --- */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-500">
+        <span className="flex items-center gap-1.5">
+          <MarcaEvento tipo={TIPO_PLAZO} /> {TIPOS_EVENTO[TIPO_PLAZO].corta}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <MarcaEvento tipo={TIPO_RUC} /> {TIPOS_EVENTO[TIPO_RUC].corta}
+        </span>
+        <span className="text-gray-300">|</span>
+        {['VERDE', 'AMARILLO', 'ROJO', 'VENCIDO', 'CUMPLIDO'].map((semaforo) => (
+          <span key={semaforo} className="flex items-center gap-1.5">
+            <span className={`inline-block h-2.5 w-2.5 rounded-full ${COLOR_MARCA[semaforo]}`} />
+            {ETIQUETA_SEMAFORO[semaforo]}
+          </span>
+        ))}
+      </div>
+
+      {/* --- Panel del día: todos los vencimientos del día elegido --- */}
+      {diaSeleccionado && (
+        <div ref={panelRef} className="mt-5 rounded-xl border border-gray-200">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Vencimientos del {fechaCorta(fechaSeleccionada)}
+              <span className="ml-2 font-normal text-gray-500">
+                ({eventosDelDiaSeleccionado.length})
+              </span>
+            </h3>
+            <button
+              type="button"
+              onClick={() => setDiaSeleccionado(null)}
+              aria-label="Cerrar panel del día"
+              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X size={16} strokeWidth={1.75} />
+            </button>
+          </div>
+          <ul className="max-h-96 divide-y divide-gray-100 overflow-y-auto">
+            {eventosDelDiaSeleccionado.map((evento) => (
+              <FilaEvento key={evento.clave} evento={evento} />
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

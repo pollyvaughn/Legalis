@@ -1,85 +1,68 @@
 // ============================================================
 // VistaLista.jsx
-// Sub-componente de CalendarioPlazosPage: lista plana de todos
-// los plazos (pendientes y cumplidos), ordenados por urgencia
-// (el mismo orden que ya devuelve el backend). Click en una fila
-// navega al detalle del expediente correspondiente.
+// Sub-componente de CalendarioPlazosPage: lista de vencimientos
+// (plazos judiciales + vencimientos de RUC, ya normalizados, ver
+// eventosCalendario.js), ordenados por urgencia: vencidos primero,
+// después rojo, amarillo, verde y cumplidos al final.
+//
+// Cada obligación periódica genera todos sus vencimientos del año, así
+// que la lista podría tener cientos de filas. Por defecto muestra los
+// vencidos y los de los próximos HORIZONTE_DIAS días; un botón permite
+// ver todos.
 // ============================================================
 
-import { useNavigate } from 'react-router-dom';
-import Badge from '../../components/ui/Badge';
-import { TONO_SEMAFORO, ETIQUETA_SEMAFORO } from '../../constants/semaforoPlazos';
-import { formatearFechaHora, formatearFechaSola } from '../../utils/fechas';
+import { useState } from 'react';
+import FilaEvento from './FilaEvento';
+import { diasHastaFecha, ordenarPorUrgencia } from './eventosCalendario';
 
-function partesFechaLista(plazo) {
-  const esFechaSinHora = Boolean(plazo.fechaVencimiento);
-  const fecha = esFechaSinHora
-    ? new Date(`${plazo.fechaVencimiento.slice(0, 10)}T00:00:00.000Z`)
-    : new Date(plazo.horaLimite);
+// Hasta cuántos días hacia adelante muestra la lista por defecto
+const HORIZONTE_DIAS = 60;
 
-  const opciones = esFechaSinHora ? { timeZone: 'UTC' } : {};
+export default function VistaLista({ eventos }) {
+  const [verTodos, setVerTodos] = useState(false);
 
-  return {
-    dia: new Intl.DateTimeFormat('es-PY', {
-      ...opciones,
-      day: '2-digit',
-    }).format(fecha),
-    mes: new Intl.DateTimeFormat('es-PY', {
-      ...opciones,
-      month: 'short',
-    })
-      .format(fecha)
-      .replace(/\./g, '')
-      .toLocaleUpperCase('es-PY'),
-  };
-}
-
-export default function VistaLista({ plazos }) {
-  const navigate = useNavigate();
-
-  if (plazos.length === 0) {
+  if (eventos.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-        No hay plazos cargados todavía.
+        No hay vencimientos para mostrar.
       </div>
     );
   }
 
+  const ordenados = ordenarPorUrgencia(eventos);
+  // Vencidos (días negativos) y los que vencen dentro del horizonte
+  const cercanos = ordenados.filter((evento) => diasHastaFecha(evento.fecha) <= HORIZONTE_DIAS);
+  const visibles = verTodos ? ordenados : cercanos;
+  const ocultos = ordenados.length - cercanos.length;
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
-      <ul className="divide-y divide-gray-100">
-        {plazos.map((plazo) => {
-          const { dia, mes } = partesFechaLista(plazo);
-          return (
-            <li
-              key={plazo.id}
-              onClick={() => navigate(`/expedientes/${plazo.expediente.id}`)}
-              className="flex cursor-pointer items-center justify-between px-5 py-4 hover:bg-gray-50"
-            >
-              <div className="flex items-center gap-4">
-                {/* Fecha destacada, mismo patrón visual que el Figma de referencia */}
-                <div className="w-14 shrink-0 text-center">
-                  <p className="text-lg font-semibold leading-tight text-gray-900">
-                    {dia}
-                  </p>
-                  <p className="text-xs uppercase text-gray-400">
-                    {mes}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{plazo.tipoPlazo?.nombre}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {plazo.expediente?.caratula} · Exp. {plazo.expediente?.numeroExpediente}
-                  </p>
-                </div>
-              </div>
-              <Badge tone={TONO_SEMAFORO[plazo.semaforo] || 'gray'}>
-                {ETIQUETA_SEMAFORO[plazo.semaforo] || plazo.semaforo}
-              </Badge>
-            </li>
-          );
-        })}
-      </ul>
+      {visibles.length === 0 ? (
+        <p className="p-8 text-center text-sm text-gray-500">
+          No hay vencimientos en los próximos {HORIZONTE_DIAS} días.
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-100">
+          {visibles.map((evento) => (
+            <FilaEvento key={evento.clave} evento={evento} mostrarFecha />
+          ))}
+        </ul>
+      )}
+
+      {/* Botón para ver los vencimientos más lejanos (o volver a ocultarlos) */}
+      {ocultos > 0 && (
+        <div className="border-t border-gray-100 px-5 py-3 text-center">
+          <button
+            type="button"
+            onClick={() => setVerTodos(!verTodos)}
+            className="text-sm font-medium text-gray-600 hover:text-gray-900"
+          >
+            {verTodos
+              ? `Mostrar solo los próximos ${HORIZONTE_DIAS} días`
+              : `Mostrar todos (${ocultos} más adelante)`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

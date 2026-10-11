@@ -91,7 +91,12 @@ function AsesoriasPage() {
   // --- Modales: alta de trámite único, alta de obligación y detalle (id abierto) ---
   const [modalNuevo, setModalNuevo] = useState(false);
   const [modalObligacion, setModalObligacion] = useState(false);
-  const [detalleId, setDetalleId] = useState(null);
+  // El detalle arranca abierto si la URL trae ?tramiteId=12 (así llegan los
+  // vencimientos de RUC desde el calendario); si no, arranca cerrado (null).
+  const [detalleId, setDetalleId] = useState(() => {
+    const idUrl = Number(searchParams.get('tramiteId'));
+    return Number.isInteger(idUrl) && idUrl > 0 ? idUrl : null;
+  });
 
   // Cambiar este número "reinicia" la pestaña de obligaciones (la fuerza a recargar)
   const [versionObligaciones, setVersionObligaciones] = useState(0);
