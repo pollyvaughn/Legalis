@@ -7,6 +7,7 @@
 const express = require('express');
 const cors = require('cors');
 const { verificarToken, exigirPasswordCambiada } = require('./middlewares/auth.middleware');
+const { rutaNoEncontrada, manejarErrores } = require('./middlewares/errores.middleware');
 
 const app = express();
 
@@ -127,5 +128,14 @@ app.use(
 app.use('/api/tipos-plazo', protegido, require('./modules/tipos-plazo/tipos-plazo.routes'));
 app.use('/api/dias-no-habiles', protegido, require('./modules/dias-no-habiles/dia-no-habil.routes'));
 app.use('/api/auditoria', protegido, require('./modules/auditoria/auditoria.routes'));
+
+// ------------------------------------------
+// MANEJO DE ERRORES (siempre al final, después de todas las rutas)
+// 1. Cualquier /api/... que no exista -> 404 en JSON
+// 2. Cualquier error que un controller pase con next(error) -> JSON
+//    { error: "mensaje" } (ver middlewares/errores.middleware.js)
+// ------------------------------------------
+app.use('/api', rutaNoEncontrada);
+app.use(manejarErrores);
 
 module.exports = app;

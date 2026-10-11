@@ -93,16 +93,36 @@ async function obtenerPorId(id) {
 // ------------------------------------------------------------
 // Editar (+ auditoría EDITAR)
 // Ahora recibe usuarioId (3er parámetro) para la auditoría.
+//
+// fechaHasta tiene TRES casos (por eso no alcanza con "¿viene o no?"):
+//   - undefined  -> no se envió: se conserva la que ya tenía
+//   - null o ''  -> se quiere BORRAR el rango (pasa a ser un solo día)
+//   - una fecha  -> se actualiza
+// Antes, null/'' se confundía con "no se envió" y el rango no se
+// podía quitar nunca.
+// La validación hasta >= desde se hace con los valores FINALES
+// (los enviados, o los que ya estaban si no se enviaron).
 // ------------------------------------------------------------
 async function actualizar(id, datos, usuarioId) {
-  await obtenerPorId(id); // valida existencia (404 si no está)
+  const existente = await obtenerPorId(id); // valida existencia (404 si no está)
 
   const { fechaDesde, fechaHasta, descripcion } = datos;
 
-  const desde = fechaDesde ? new Date(fechaDesde) : undefined;
-  const hasta = fechaHasta ? new Date(fechaHasta) : undefined;
+  if (descripcion !== undefined && !String(descripcion).trim()) {
+    const error = new Error('La descripción no puede quedar vacía.');
+    error.status = 400;
+    throw error;
+  }
 
-  if (desde && hasta && hasta < desde) {
+  const desdeFinal = fechaDesde ? new Date(fechaDesde) : existente.fechaDesde;
+  const hastaFinal =
+    fechaHasta === undefined
+      ? existente.fechaHasta // no se envió: se conserva
+      : fechaHasta
+        ? new Date(fechaHasta) // fecha nueva
+        : null; // null o '': se borra el rango
+
+  if (hastaFinal && hastaFinal < desdeFinal) {
     const error = new Error('fechaHasta no puede ser anterior a fechaDesde.');
     error.status = 400;
     throw error;
@@ -111,7 +131,8 @@ async function actualizar(id, datos, usuarioId) {
   return prisma.$transaction(async (tx) => {
     const dia = await tx.diaNoHabil.update({
       where: { id },
-      data: { fechaDesde: desde, fechaHasta: hasta, descripcion },
+      // descripcion undefined = Prisma no la toca
+      data: { fechaDesde: desdeFinal, fechaHasta: hastaFinal, descripcion },
     });
 
     await registrarAuditoria(tx, {
