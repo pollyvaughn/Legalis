@@ -14,6 +14,8 @@ const soloAbogado = requiereRol('ABOGADO');
 
 router.get('/', controller.listar);   
 router.get('/exportar', controller.exportar);                    // GET    /api/tramites (filtros, ver controller)
+// IMPORTANTE: '/calendario' va ANTES de '/:id', si no Express lo toma como un id.
+router.get('/calendario', controller.calendario);         // GET    /api/tramites/calendario (abiertos + semáforo)
 router.get('/:id', controller.obtener);                   // GET    /api/tramites/5
 router.post('/', soloAbogado, controller.crear);          // POST   /api/tramites (trámite único)
 router.put('/:id', soloAbogado, controller.actualizar);   // PUT    /api/tramites/5 (fecha, estado, descripción)

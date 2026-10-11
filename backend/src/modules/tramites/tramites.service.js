@@ -9,6 +9,8 @@ const { ErrorNegocio } = require('../../utils/errores');
 const { siVino, limpiarTexto } = require('../../utils/entrada');
 // Agregar arriba, junto a los otros requires:
 const { registrarAuditoria } = require('../../utils/auditoria');
+// Semáforo por días: el MISMO que usan los plazos judiciales (RN-24)
+const { calcularSemaforo } = require('../../utils/calendarioPlazos');
 
 // "Abiertos" = los que todavía requieren acción
 const ESTADOS_ABIERTOS = ['PENDIENTE', 'EN_PROCESO'];
@@ -73,6 +75,36 @@ const listarTramites = async ({
   ]);
 
   return { datos, total, pagina, limite, totalPaginas: Math.ceil(total / limite) };
+};
+
+// ------------------------------------------------------------
+// LISTAR PARA EL CALENDARIO (RF6 / RN-24)
+// Trae TODOS los trámites abiertos (pendientes o en proceso), sin
+// paginar: el calendario necesita verlos todos juntos, igual que
+// con los plazos judiciales. Cada uno sale con su semáforo, calculado
+// al vuelo (nunca se guarda) con los mismos cortes que los plazos:
+//   VENCIDO (ya pasó) · ROJO (hoy o mañana) · AMARILLO (2 a 5 días) · VERDE
+// Son los vencimientos de RUC: los generados por una obligación
+// periódica y los únicos cargados a mano.
+// ------------------------------------------------------------
+const listarParaCalendario = async () => {
+  const tramites = await prisma.tramite.findMany({
+    where: { estado: { in: ESTADOS_ABIERTOS } },
+    orderBy: [{ fechaVencimiento: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      fechaVencimiento: true,
+      estado: true,
+      descripcion: true,
+      cliente: { select: { id: true, nombreRazonSocial: true, ruc: true } },
+      tipoTramite: { select: { id: true, nombre: true } },
+    },
+  });
+
+  return tramites.map((tramite) => ({
+    ...tramite,
+    semaforo: calcularSemaforo({ fechaVencimiento: tramite.fechaVencimiento }),
+  }));
 };
 
 // ------------------------------------------------------------
@@ -200,6 +232,7 @@ const descripcionTramite = (tramite) =>
 
 module.exports = {
   listarTramites,
+  listarParaCalendario,
   obtenerTramite,
   crearTramite,
   actualizarTramite,

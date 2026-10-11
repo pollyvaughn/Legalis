@@ -56,6 +56,18 @@ const listar = async (req, res) => {
   }
 };
 
+// GET /api/tramites/calendario
+// Trámites abiertos con su semáforo, para mostrarlos en el calendario
+// junto a los plazos judiciales (RF6). Sin filtros ni paginación.
+const calendario = async (req, res) => {
+  try {
+    const tramites = await service.listarParaCalendario();
+    res.json(tramites);
+  } catch (error) {
+    responderError(res, error, 'Error al cargar los vencimientos del calendario', NO_ENCONTRADO);
+  }
+};
+
 // GET /api/tramites/:id
 const obtener = async (req, res) => {
   try {
@@ -211,4 +223,4 @@ const exportar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, exportar, };
+module.exports = { listar, calendario, obtener, crear, actualizar, eliminar, exportar, };
