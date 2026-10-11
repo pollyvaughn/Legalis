@@ -12,6 +12,10 @@
 // La respuesta puede traer `plazosRecalculados`: se muestra un
 // aviso puntual con cuántos se ajustaron.
 //
+// EXPORTAR: el botón "Exportar PDF" del encabezado abre un modal
+// (ExportarExpedienteModal) para bajar el historial de actuaciones
+// (con período) o los plazos pendientes del expediente.
+//
 // ELIMINAR: antes de confirmar, se consulta
 // GET /actuaciones/:id/impacto-eliminacion — si hay un plazo
 // cumplido, se bloquea con el motivo; si no, se muestra cuántos
@@ -24,6 +28,7 @@ import api from '../../api/axios';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import Modal from '../ui/Modal';
+import ExportarExpedienteModal from './ExportarExpedienteModal';
 import { Input, SelectInput, Textarea } from '../ui/Input';
 import { OPCIONES_TIPO_ACTUACION, etiquetaTipoActuacion } from '../../constants/tiposActuacion';
 import { useAuth } from '../../context/AuthContext';
@@ -41,6 +46,9 @@ export default function ActuacionesSeccion({
   const { esAbogado } = useAuth();
 
   const hoyComoInputDate = hoyInput();
+
+  // --- Exportar PDF (modal) ---
+  const [mostrarExportar, setMostrarExportar] = useState(false);
 
   // --- Alta ---
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -218,11 +226,17 @@ export default function ActuacionesSeccion({
     <div className="rounded-xl border border-gray-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">Actuaciones</h2>
-        {esAbogado && !mostrarForm && (
-          <Button size="sm" onClick={() => setMostrarForm(true)}>
-            + Registrar actuación
+        <div className="flex items-center gap-2">
+          {/* Exportar: lo ven todos los roles (es solo lectura) */}
+          <Button size="sm" variant="secondary" onClick={() => setMostrarExportar(true)}>
+            Exportar PDF
           </Button>
-        )}
+          {esAbogado && !mostrarForm && (
+            <Button size="sm" onClick={() => setMostrarForm(true)}>
+              + Registrar actuación
+            </Button>
+          )}
+        </div>
       </div>
 
       {sugerenciaPlazo && (
@@ -449,6 +463,14 @@ export default function ActuacionesSeccion({
         </form>
       )}
 
+      {/* --- Modal de exportación a PDF --- */}
+      {mostrarExportar && (
+        <ExportarExpedienteModal
+          expedienteId={expedienteId}
+          onClose={() => setMostrarExportar(false)}
+        />
+      )}
+
       {/* --- Modal de impacto / confirmación de eliminación ---
           Tres estados posibles:
             1. cargandoImpacto: todavía no sabemos si se puede eliminar.
@@ -470,9 +492,9 @@ export default function ActuacionesSeccion({
                 {impacto.plazosPendientes?.length > 0 && (
                   <div className="mt-3 rounded-lg bg-amber-50 p-3">
                     <p className="text-sm font-medium text-amber-800">
-                      Se eliminarán también: {impacto.plazosPendientes.length} plazo(s)
-                      {impacto.plazosPendientes.lengtxFRh === 1 ? '' : 's'} pendiente(s)
-                      {impacto.plazosPendientes.length === 1 ? '' : 's'}:
+                      Se {impacto.plazosPendientes.length === 1 ? 'eliminará' : 'eliminarán'} también{' '}
+                      {impacto.plazosPendientes.length}{' '}
+                      {impacto.plazosPendientes.length === 1 ? 'plazo pendiente' : 'plazos pendientes'}:
                     </p>
                     <ul className="mt-2 space-y-1">
                       {impacto.plazosPendientes.map((p) => (

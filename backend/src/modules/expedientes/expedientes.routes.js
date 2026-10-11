@@ -17,6 +17,7 @@ const soloAbogado = requiereRol('ABOGADO');
 router.post('/', soloAbogado, expedientesController.crear);         // POST   /api/expedientes
 router.get('/', expedientesController.listar);  
 router.get('/exportar', expedientesController.exportar); // GET /api/expedientes/exportar                    // GET    /api/expedientes (?clienteId=X opcional)
+router.get('/:id/exportar', expedientesController.exportarReporte); // GET /api/expedientes/5/exportar?contenido=actuaciones|plazos&desde=&hasta=
 router.get('/:id', expedientesController.obtenerPorId);              // GET    /api/expedientes/5
 router.put('/:id', soloAbogado, expedientesController.actualizar);   // PUT    /api/expedientes/5
 

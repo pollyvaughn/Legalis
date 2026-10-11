@@ -20,10 +20,16 @@ const PDFDocument = require('pdfkit');
 //                deben sumar aprox. el ancho útil de la hoja: ~451pt
 //                en A4 con margen de 72pt)
 //   filas     -> array de arrays de strings, mismo orden que columnas
+//   multilinea -> (opcional, por defecto false) si es true, los textos
+//                largos se parten en varias líneas (la fila crece) en vez
+//                de cortarse con "...", y los encabezados de columna se
+//                repiten en cada hoja nueva. Pensado para listados con
+//                texto libre (ej: descripción de una actuación). Los
+//                listados de Módulo 1 no lo usan y siguen igual.
 //
 // Devuelve una Promise<Buffer> con el PDF ya armado.
 // ------------------------------------------------------------
-const generarListadoPdf = ({ titulo, subtitulo, columnas, filas }) =>
+const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = false }) =>
   new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' }); // horizontal: entran más columnas
     const trozos = [];
@@ -45,34 +51,62 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas }) =>
     doc.moveTo(40, inicioTabla).lineTo(doc.page.width - 40, inicioTabla).strokeColor('#ccc').stroke();
     doc.moveDown(0.5);
 
-    // --- Encabezados de columna ---
+    // --- Encabezados de columna (función para poder repetirlos en cada hoja) ---
     const filaAltura = 18;
-    let y = doc.y;
-    let x = 40;
+    const dibujarEncabezados = (yInicial) => {
+      let xCol = 40;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+      columnas.forEach((col) => {
+        doc.text(col.encabezado, xCol, yInicial, { width: col.ancho, ellipsis: true });
+        xCol += col.ancho;
+      });
+      const yLinea = yInicial + filaAltura;
+      doc.moveTo(40, yLinea - 4).lineTo(doc.page.width - 40, yLinea - 4).strokeColor('#ccc').stroke();
+      doc.font('Helvetica').fontSize(9);
+      return yLinea;
+    };
 
-    doc.font('Helvetica-Bold').fontSize(9);
-    columnas.forEach((col) => {
-      doc.text(col.encabezado, x, y, { width: col.ancho, ellipsis: true });
-      x += col.ancho;
-    });
-    y += filaAltura;
-    doc.moveTo(40, y - 4).lineTo(doc.page.width - 40, y - 4).strokeColor('#ccc').stroke();
+    let y = dibujarEncabezados(doc.y);
+    let x = 40;
 
     // --- Filas de datos ---
     doc.font('Helvetica').fontSize(9);
     filas.forEach((fila) => {
+      // Modo multilínea: la altura de la fila es la de su celda más alta
+      // (heightOfString mide cuánto ocupa el texto al partirse en el ancho
+      // de la columna). Modo normal: altura fija, texto cortado con "...".
+      const margenCelda = 6; // aire entre columnas en modo multilínea
+      let alturaFila = filaAltura;
+      if (multilinea) {
+        const alturaTexto = Math.max(
+          ...fila.map((valor, i) =>
+            doc.heightOfString(String(valor ?? '—'), { width: columnas[i].ancho - margenCelda })
+          )
+        );
+        alturaFila = Math.max(filaAltura, alturaTexto + 8);
+      }
+
       // Salto de página manual: si no entra la fila siguiente, nueva hoja
-      if (y > doc.page.height - 60) {
+      const limite = doc.page.height - 70; // deja lugar al pie (ver más abajo)
+      if (multilinea ? y + alturaFila > limite : y > limite) {
         doc.addPage();
-        y = 40;
+        y = multilinea ? dibujarEncabezados(40) : 40;
       }
 
       x = 40;
       fila.forEach((valor, i) => {
-        doc.text(String(valor ?? '—'), x, y, { width: columnas[i].ancho, ellipsis: true });
+        const opciones = multilinea
+          ? { width: columnas[i].ancho - margenCelda }
+          : { width: columnas[i].ancho, ellipsis: true };
+        doc.text(String(valor ?? '—'), x, y, opciones);
         x += columnas[i].ancho;
       });
-      y += filaAltura;
+      y += alturaFila;
+
+      // Línea fina entre filas (solo multilínea, para separar textos largos)
+      if (multilinea) {
+        doc.moveTo(40, y - 4).lineTo(doc.page.width - 40, y - 4).strokeColor('#eee').stroke();
+      }
     });
 
     // --- Pie: fecha de generación + total ---
@@ -84,7 +118,9 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas }) =>
       .text(
         `Generado el ${new Date().toLocaleString('es-PY')} — ${filas.length} registro(s)`,
         40,
-        doc.page.height - 40
+        // 55 y no 40: el texto tiene que entrar ANTES del margen inferior (40),
+        // si no pdfkit agrega una hoja en blanco solo para el pie.
+        doc.page.height - 55
       );
 
     doc.end();

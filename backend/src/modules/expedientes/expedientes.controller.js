@@ -5,7 +5,8 @@
 // ============================================
 
 const expedientesService = require('./expedientes.service');
-const { ErrorNegocio } = require('../../utils/errores');
+const expedientesReporteService = require('./expedientes.reporte.service');
+const { ErrorNegocio, responderError } = require('../../utils/errores');
 const { generarListadoPdf } = require('../../utils/exportarListadoPdf');
 
 // Mensaje único para duplicados: se reutiliza en crear y actualizar
@@ -200,10 +201,37 @@ async function exportar(req, res) {
   }
 }
 
+// ------------------------------------------
+// GET /api/expedientes/:id/exportar
+// Reporte PDF de UN expediente (Módulo 2). Query params:
+//   contenido -> 'actuaciones' | 'plazos'   (obligatorio)
+//   desde, hasta -> 'AAAA-MM-DD', opcionales; solo aplican a
+//                   'actuaciones' (los plazos pendientes no llevan período)
+// El service valida y arma columnas/filas; acá solo se genera el PDF.
+// ------------------------------------------
+async function exportarReporte(req, res) {
+  try {
+    const { contenido, desde, hasta } = req.query;
+    const { nombreArchivo, ...datosPdf } = await expedientesReporteService.armarReporte(
+      req.params.id,
+      { contenido, desde, hasta }
+    );
+
+    const buffer = await generarListadoPdf(datosPdf);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    res.send(buffer);
+  } catch (error) {
+    responderError(res, error, 'Error al generar el PDF', 'Expediente no encontrado');
+  }
+}
+
 module.exports = {
   crear,
   listar,
   obtenerPorId,
   actualizar,
   exportar,
+  exportarReporte,
 };
