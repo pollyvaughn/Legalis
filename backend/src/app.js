@@ -96,6 +96,12 @@ app.use('/api/expedientes/:expedienteId/liquidaciones', protegido, liquidaciones
 app.use('/api/tramites/:tramiteId/liquidaciones', protegido, liquidacionesRoutes.porTramite);
 app.use('/api/liquidaciones', protegido, liquidacionesRoutes.propias);
 
+// Gastos reembolsables (Módulo 3)
+const gastosRoutes = require('./modules/gastos/gastos.routes');
+app.use('/api/expedientes/:expedienteId/gastos', protegido, gastosRoutes.porExpediente);
+app.use('/api/tramites/:tramiteId/gastos', protegido, gastosRoutes.porTramite);
+app.use('/api/gastos', protegido, gastosRoutes.propias);
+
 // ------------------------------------------
 // MÓDULO 2 — Actuaciones procesales
 // Actuaciones ANIDADAS bajo expediente (crear/listar):
