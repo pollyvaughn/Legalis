@@ -4,7 +4,9 @@
 // Reutilizable: lo único que cambia es la URL de la API.
 //
 // Props:
-//   urlBase  "/expedientes/5/liquidaciones" o "/tramites/5/liquidaciones"
+//   urlBase   "/expedientes/5/liquidaciones" o "/tramites/5/liquidaciones"
+//   onChange  (opcional) se llama tras guardar o eliminar, para que el padre
+//             refresque la cuenta corriente
 //
 // FLUJO: se elige el método, se completan los datos, se toca "Calcular"
 // (GET /liquidaciones/calcular, no guarda nada) y recién ahí se habilita
@@ -86,7 +88,7 @@ function detalleCalculo(liq) {
   return 'Monto fijo acordado';
 }
 
-export default function LiquidacionesSeccion({ urlBase }) {
+export default function LiquidacionesSeccion({ urlBase, onChange }) {
   const [lista, setLista] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorLista, setErrorLista] = useState('');
@@ -216,6 +218,7 @@ export default function LiquidacionesSeccion({ urlBase }) {
         setLista((l) => [respuesta.data, ...l]); // la más nueva arriba
       }
       cerrarFormulario();
+      onChange?.();
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar la liquidación');
     } finally {
@@ -231,6 +234,7 @@ export default function LiquidacionesSeccion({ urlBase }) {
     try {
       await api.delete(`/liquidaciones/${id}`);
       setLista((l) => l.filter((x) => x.id !== id));
+      onChange?.();
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo eliminar la liquidación');
     } finally {

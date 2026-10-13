@@ -18,6 +18,7 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { Input, SelectInput } from '../../components/ui/Input';
 import ClienteAsesoriasSeccion from '../../components/asesorias/ClienteAsesoriasSeccion';
+import CuentaCorrienteSeccion from '../../components/honorarios/CuentaCorrienteSeccion';
 import { useAuth } from '../../context/AuthContext';
 
 function ClienteDetailPage() {
@@ -383,6 +384,13 @@ function ClienteDetailPage() {
 
       {/* --- Asesorías y trámites del cliente (Módulo 1.3) --- */}
       <ClienteAsesoriasSeccion clienteId={cliente.id} mostrarEnlace={cliente.activo} />
+
+      {/* --- Cuenta corriente consolidada del cliente (Módulo 3): solo ABOGADO --- */}
+      {esAbogado && (
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+          <CuentaCorrienteSeccion urlBase={`/clientes/${id}/cuenta-corriente`} />
+        </div>
+      )}
 
       {/* --- Modal de confirmación para inactivar/reactivar --- */}
       {mostrarConfirmacion && (

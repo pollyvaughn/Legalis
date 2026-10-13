@@ -5,7 +5,9 @@
 // al cliente. Reutilizable: lo único que cambia es la URL de la API.
 //
 // Props:
-//   urlBase  "/expedientes/5/gastos" o "/tramites/5/gastos"
+//   urlBase   "/expedientes/5/gastos" o "/tramites/5/gastos"
+//   onChange  (opcional) se llama tras guardar o anular, para que el padre
+//             refresque la cuenta corriente
 //
 // REGLAS (iguales al backend):
 //  - Los gastos NO llevan IVA.
@@ -46,7 +48,7 @@ function ordenar(lista) {
   });
 }
 
-export default function GastosSeccion({ urlBase }) {
+export default function GastosSeccion({ urlBase, onChange }) {
   const [lista, setLista] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorLista, setErrorLista] = useState('');
@@ -137,6 +139,7 @@ export default function GastosSeccion({ urlBase }) {
         setLista((l) => ordenar([respuesta.data, ...l]));
       }
       cerrarFormulario();
+      onChange?.();
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar el gasto');
     } finally {
@@ -154,6 +157,7 @@ export default function GastosSeccion({ urlBase }) {
       const respuesta = await api.post(`/gastos/${anulando.id}/anular`);
       setLista((l) => l.map((g) => (g.id === anulando.id ? respuesta.data : g)));
       setAnulando(null);
+      onChange?.();
     } catch (err) {
       setErrorAnulacion(err.response?.data?.error || 'No se pudo anular el gasto');
     } finally {

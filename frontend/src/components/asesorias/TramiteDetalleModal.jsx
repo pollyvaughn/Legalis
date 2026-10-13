@@ -23,6 +23,7 @@ import { formatearFechaSola, aInputFecha } from '../../utils/fechas';
 import DocumentosSeccion from './DocumentosSeccion';
 import LiquidacionesSeccion from '../honorarios/LiquidacionesSeccion';
 import GastosSeccion from '../honorarios/GastosSeccion';
+import CuentaCorrienteSeccion from '../honorarios/CuentaCorrienteSeccion';
 import { useAuth } from '../../context/AuthContext';
 
 // Un dato del encabezado: etiqueta chica arriba, valor abajo
@@ -48,6 +49,10 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
 
   // Eliminar: confirmación en dos pasos, dentro del mismo modal
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
+
+  // Sube cada vez que cambian honorarios o gastos, para refrescar la cuenta corriente (Módulo 3)
+  const [versionCuenta, setVersionCuenta] = useState(0);
+  const avisarCambioCuenta = () => setVersionCuenta((v) => v + 1);
 
   // Guarda el trámite y sincroniza el formulario con sus datos
   function aplicar(datos) {
@@ -241,15 +246,20 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
             }}
           />
 
-          {/* --- Honorarios y gastos del trámite (Módulo 3): solo ABOGADO --- */}
+          {/* --- Cuenta corriente, honorarios y gastos del trámite (Módulo 3): solo ABOGADO --- */}
           {esAbogado && (
             <div className="border-t border-gray-100 pt-5">
-              <LiquidacionesSeccion urlBase={`/tramites/${tramiteId}/liquidaciones`} />
+              <CuentaCorrienteSeccion urlBase={`/tramites/${tramiteId}/cuenta-corriente`} refrescar={versionCuenta} />
             </div>
           )}
           {esAbogado && (
             <div className="border-t border-gray-100 pt-5">
-              <GastosSeccion urlBase={`/tramites/${tramiteId}/gastos`} />
+              <LiquidacionesSeccion urlBase={`/tramites/${tramiteId}/liquidaciones`} onChange={avisarCambioCuenta} />
+            </div>
+          )}
+          {esAbogado && (
+            <div className="border-t border-gray-100 pt-5">
+              <GastosSeccion urlBase={`/tramites/${tramiteId}/gastos`} onChange={avisarCambioCuenta} />
             </div>
           )}
 

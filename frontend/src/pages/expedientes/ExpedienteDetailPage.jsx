@@ -33,6 +33,7 @@ import PlazosSeccion from '../../components/expedientes/PlazosSeccion';
 import PartesSeccion from '../../components/expedientes/PartesSeccion';
 import LiquidacionesSeccion from '../../components/honorarios/LiquidacionesSeccion';
 import GastosSeccion from '../../components/honorarios/GastosSeccion';
+import CuentaCorrienteSeccion from '../../components/honorarios/CuentaCorrienteSeccion';
 
 // Muestra el valor, o un guión si está vacío/null — evita que
 // la lista de partes se vea inconsistente entre sí (ver backlog).
@@ -75,6 +76,10 @@ function ExpedienteDetailPage() {
   const [plazos, setPlazos] = useState([]);
   const [actuacionIdParaPlazo, setActuacionIdParaPlazo] = useState('');
   const [errorPlazos, setErrorPlazos] = useState('');
+
+  // Sube cada vez que cambian honorarios o gastos, para refrescar la cuenta corriente (Módulo 3)
+  const [versionCuenta, setVersionCuenta] = useState(0);
+  const avisarCambioCuenta = () => setVersionCuenta((v) => v + 1);
 
   // ------------------------------------------
   // Trae el expediente del backend. Pide incluirInactivos=true
@@ -446,15 +451,20 @@ useEffect(() => {
       />
       </div>
 
-      {/* --- Honorarios y gastos del expediente (Módulo 3): solo ABOGADO --- */}
+      {/* --- Cuenta corriente, honorarios y gastos del expediente (Módulo 3): solo ABOGADO --- */}
       {esAbogado && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-          <LiquidacionesSeccion urlBase={`/expedientes/${id}/liquidaciones`} />
+          <CuentaCorrienteSeccion urlBase={`/expedientes/${id}/cuenta-corriente`} refrescar={versionCuenta} />
         </div>
       )}
       {esAbogado && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-          <GastosSeccion urlBase={`/expedientes/${id}/gastos`} />
+          <LiquidacionesSeccion urlBase={`/expedientes/${id}/liquidaciones`} onChange={avisarCambioCuenta} />
+        </div>
+      )}
+      {esAbogado && (
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+          <GastosSeccion urlBase={`/expedientes/${id}/gastos`} onChange={avisarCambioCuenta} />
         </div>
       )}
 
