@@ -32,6 +32,7 @@ import ActuacionesSeccion from '../../components/expedientes/ActuacionesSeccion'
 import PlazosSeccion from '../../components/expedientes/PlazosSeccion';
 import PartesSeccion from '../../components/expedientes/PartesSeccion';
 import LiquidacionesSeccion from '../../components/honorarios/LiquidacionesSeccion';
+import GastosSeccion from '../../components/honorarios/GastosSeccion';
 
 // Muestra el valor, o un guión si está vacío/null — evita que
 // la lista de partes se vea inconsistente entre sí (ver backlog).
@@ -445,10 +446,15 @@ useEffect(() => {
       />
       </div>
 
-      {/* --- Honorarios del expediente (Módulo 3): solo ABOGADO --- */}
+      {/* --- Honorarios y gastos del expediente (Módulo 3): solo ABOGADO --- */}
       {esAbogado && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
           <LiquidacionesSeccion urlBase={`/expedientes/${id}/liquidaciones`} />
+        </div>
+      )}
+      {esAbogado && (
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+          <GastosSeccion urlBase={`/expedientes/${id}/gastos`} />
         </div>
       )}
 

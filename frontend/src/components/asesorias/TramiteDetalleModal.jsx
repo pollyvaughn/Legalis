@@ -22,6 +22,7 @@ import { OPCIONES_ESTADO_TRAMITE } from '../../constants/tramites';
 import { formatearFechaSola, aInputFecha } from '../../utils/fechas';
 import DocumentosSeccion from './DocumentosSeccion';
 import LiquidacionesSeccion from '../honorarios/LiquidacionesSeccion';
+import GastosSeccion from '../honorarios/GastosSeccion';
 import { useAuth } from '../../context/AuthContext';
 
 // Un dato del encabezado: etiqueta chica arriba, valor abajo
@@ -240,10 +241,15 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
             }}
           />
 
-          {/* --- Honorarios del trámite (Módulo 3): solo ABOGADO --- */}
+          {/* --- Honorarios y gastos del trámite (Módulo 3): solo ABOGADO --- */}
           {esAbogado && (
             <div className="border-t border-gray-100 pt-5">
               <LiquidacionesSeccion urlBase={`/tramites/${tramiteId}/liquidaciones`} />
+            </div>
+          )}
+          {esAbogado && (
+            <div className="border-t border-gray-100 pt-5">
+              <GastosSeccion urlBase={`/tramites/${tramiteId}/gastos`} />
             </div>
           )}
 
