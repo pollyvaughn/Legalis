@@ -14,6 +14,12 @@
 const prisma = require('../../config/database');
 const plazosService = require('../plazos/plazos.service');
 const { ErrorNegocio } = require('../../utils/errores');
+const {
+  fechaCorta,
+  fechaCortaDesdeTexto,
+  fechaHoraCorta,
+  validarFechaTexto,
+} = require('../../utils/formatoReportes');
 
 // Etiquetas legibles de los enums (espejo de las constantes del
 // frontend: constants/tiposActuacion.js, tiposPlazo.js y
@@ -32,60 +38,6 @@ const ETIQUETA_MODALIDAD = { HABILES: 'Días hábiles', CORRIDOS: 'Días corrido
 const ETIQUETA_SEMAFORO = { VERDE: 'Al día', AMARILLO: 'Próximo', ROJO: 'Urgente', VENCIDO: 'Vencido' };
 
 const CONTENIDOS_VALIDOS = ['actuaciones', 'plazos'];
-const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
-// ------------------------------------------------------------
-// Helper: Date de una columna @db.Date (medianoche UTC) -> "DD/MM/AAAA".
-// Se arma desde el ISO para que no se corra un día por la zona horaria.
-// ------------------------------------------------------------
-function fechaCorta(fecha) {
-  if (!fecha) return '—';
-  const [anio, mes, dia] = new Date(fecha).toISOString().slice(0, 10).split('-');
-  return `${dia}/${mes}/${anio}`;
-}
-
-// ------------------------------------------------------------
-// Helper: "AAAA-MM-DD" (como llega del frontend) -> "DD/MM/AAAA"
-// ------------------------------------------------------------
-function fechaCortaDesdeTexto(texto) {
-  const [anio, mes, dia] = texto.split('-');
-  return `${dia}/${mes}/${anio}`;
-}
-
-// ------------------------------------------------------------
-// Helper: fecha y hora exactas de una horaLimite, en hora de
-// Paraguay y formato 24 h. Ej: "19/10/2026 15:30"
-// ------------------------------------------------------------
-function fechaHoraCorta(fecha) {
-  return new Intl.DateTimeFormat('es-PY', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'America/Asuncion',
-  })
-    .format(new Date(fecha))
-    .replace(', ', ' '); // "19/10/2026, 15:30" -> "19/10/2026 15:30"
-}
-
-// ------------------------------------------------------------
-// Helper: valida un "AAAA-MM-DD" opcional. Devuelve el texto
-// (o null si no vino) o lanza 400 si no es una fecha real.
-// ------------------------------------------------------------
-function validarFechaTexto(valor, nombre) {
-  if (!valor) return null;
-  // Ojo: toISOString() lanza error con fechas imposibles (ej: mes 13),
-  // por eso primero se chequea que el Date sea válido.
-  const fecha = new Date(`${valor}T00:00:00.000Z`);
-  const esValida =
-    FORMATO_FECHA.test(valor) && !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
-  if (!esValida) {
-    throw new ErrorNegocio(`La fecha "${nombre}" no es válida (formato AAAA-MM-DD).`, 400);
-  }
-  return valor;
-}
 
 // ------------------------------------------------------------
 // Reporte de ACTUACIONES de un expediente, con período opcional.

@@ -162,7 +162,14 @@ async function crearPlazo(expedienteId, datos, usuarioId) {
     observaciones,
   } = datos;
 
-  await obtenerExpedienteOFallar(expedienteId);
+  const expediente = await obtenerExpedienteOFallar(expedienteId);
+
+  // Igual que las actuaciones: un expediente inactivo no recibe cargas nuevas.
+  if (!expediente.activo) {
+    const error = new Error('No se pueden registrar plazos sobre un expediente inactivo.');
+    error.status = 400;
+    throw error;
+  }
 
   // Si se indica actuacionId, validar que pertenezca a este expediente.
   if (actuacionId) {
