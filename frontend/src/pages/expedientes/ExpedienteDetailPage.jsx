@@ -427,6 +427,12 @@ useEffect(() => {
 
       {/* --- Plazos judiciales del expediente (Módulo 2) --- */}
       <div className="mt-6">
+      {/* Aviso si falló la carga/actualización de plazos (antes se guardaba y no se mostraba) */}
+      {errorPlazos && (
+        <p role="alert" className="mb-3 text-sm text-red-600">
+          {errorPlazos}
+        </p>
+      )}
       <PlazosSeccion
         expedienteId={id}
         plazos={plazos}
