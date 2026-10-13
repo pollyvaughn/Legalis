@@ -102,6 +102,12 @@ app.use('/api/expedientes/:expedienteId/gastos', protegido, gastosRoutes.porExpe
 app.use('/api/tramites/:tramiteId/gastos', protegido, gastosRoutes.porTramite);
 app.use('/api/gastos', protegido, gastosRoutes.propias);
 
+// Cuenta corriente (Módulo 3, solo lectura): por expediente, por trámite y consolidada por cliente
+const cuentaCorrienteRoutes = require('./modules/cuenta-corriente/cuenta-corriente.routes');
+app.use('/api/expedientes/:expedienteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porExpediente);
+app.use('/api/tramites/:tramiteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porTramite);
+app.use('/api/clientes/:clienteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porCliente);
+
 // ------------------------------------------
 // MÓDULO 2 — Actuaciones procesales
 // Actuaciones ANIDADAS bajo expediente (crear/listar):
