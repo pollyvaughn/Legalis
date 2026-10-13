@@ -192,6 +192,8 @@ model Expediente {
   documentosRecibidos DocumentoRecibido[]   // Módulo 1.3
   actuaciones     Actuacion[] // (Módulo 2): historial de actuaciones registradas sobre este expediente
   plazosJudiciales PlazoJudicial[]
+  liquidaciones   LiquidacionHonorarios[] // (Módulo 3): honorarios liquidados sobre este expediente
+  gastos          GastoReembolsable[]     // (Módulo 3): gastos adelantados en este expediente
   @@map("expedientes")
 }
 
@@ -401,6 +403,9 @@ model Tramite {
   actualizadoEn    DateTime             @updatedAt
 
   documentos       DocumentoRecibido[]
+
+  liquidaciones    LiquidacionHonorarios[] // (Módulo 3): honorarios liquidados sobre este trámite
+  gastos           GastoReembolsable[]     // (Módulo 3): gastos adelantados en este trámite
 
   // Evita generar dos veces el mismo período de una obligación.
   // (Postgres trata los NULL como distintos: los trámites únicos no chocan entre sí.)
@@ -638,6 +643,143 @@ model PlazoJudicial {
   @@index([estado, fechaVencimiento])
   @@index([expedienteId])
   @@map("plazos_judiciales")
+}
+ 
+// ============================================================
+// MÓDULO 3 — Honorarios y gastos reembolsables (RF7 / RF8)
+// Moneda: guaraníes. Los montos usan Decimal(15,2) igual que
+// Expediente.montoJuicio (15 dígitos en total, 2 decimales), aunque
+// el cálculo los redondea al guaraní entero (ver calculoHonorarios.js).
+// Los cobros y recibos (RF10) son del Módulo 4: acá solo queda el
+// campo `estado`, que el Módulo 4 va a actualizar al registrar cobros.
+// ============================================================
+
+// ------------------------------------------------------------
+// MÉTODO DE CÁLCULO DE HONORARIOS (RN-25)
+// PORCENTAJE -> montoBase × porcentaje ÷ 100
+// JORNALES   -> cantidadJornales × valorJornal
+// MONTO_FIJO -> el monto ingresado tal cual
+// ------------------------------------------------------------
+enum MetodoHonorarios {
+  PORCENTAJE
+  JORNALES
+  MONTO_FIJO
+}
+
+// ------------------------------------------------------------
+// TASA DE IVA (RN-28). Confirmado por la abogada 08/10/2026:
+// el IVA se SUMA encima del honorario y se elige en los 3 métodos.
+// Enum (no número libre) para que la base rechace tasas inventadas.
+// ------------------------------------------------------------
+enum TasaIva {
+  IVA_10    // 10%
+  IVA_5     // 5%
+  EXENTA    // 0%
+}
+
+// ------------------------------------------------------------
+// ESTADO DE UNA LIQUIDACIÓN (RF7 / RF10)
+// Nace PENDIENTE. El Módulo 4 la pasa a COBRADO_PARCIALMENTE o
+// COBRADO al registrar/anular cobros.
+// ------------------------------------------------------------
+enum EstadoLiquidacion {
+  PENDIENTE
+  COBRADO_PARCIALMENTE
+  COBRADO
+}
+
+// ------------------------------------------------------------
+// ESTADO DE UN GASTO (RF8 / RF10)
+// Igual que la liquidación, más ANULADO (CU-23: "anular un gasto
+// cargado por error"). Un gasto ANULADO no cuenta en el saldo.
+// ------------------------------------------------------------
+enum EstadoGasto {
+  PENDIENTE
+  COBRADO_PARCIALMENTE
+  COBRADO
+  ANULADO
+}
+
+// ------------------------------------------------------------
+// LIQUIDACIÓN DE HONORARIOS
+// Una liquidación pertenece a un expediente O a un trámite (RN-26):
+// uno de los dos, nunca ambos ni ninguno. Esa regla la valida el
+// service (Prisma no tiene CHECK), mismo patrón que DocumentoRecibido.
+// Un expediente/trámite puede tener varias liquidaciones (RN-27,
+// ej. por etapas).
+//
+// SNAPSHOT: se guardan los datos de entrada del cálculo (base, %,
+// jornales, valor del jornal) y el resultado (neto, IVA, total).
+// Así, si mañana cambia el valor del jornal, las liquidaciones ya
+// hechas no se modifican.
+// onDelete: Restrict = no se puede borrar un expediente/trámite
+// que tenga liquidaciones.
+// ------------------------------------------------------------
+model LiquidacionHonorarios {
+  id               Int               @id @default(autoincrement())
+
+  expedienteId     Int?
+  expediente       Expediente?       @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+  tramiteId        Int?
+  tramite          Tramite?          @relation(fields: [tramiteId], references: [id], onDelete: Restrict)
+
+  metodo           MetodoHonorarios
+  concepto         String?           @db.VarChar(200)       // concepto o etapa (ej. "Etapa de demanda"); obligatorio en MONTO_FIJO (lo valida el service)
+
+  // --- Datos de entrada según el método (los que no aplican quedan null) ---
+  montoBase        Decimal?          @db.Decimal(15, 2)     // solo PORCENTAJE: monto base del juicio
+  porcentaje       Decimal?          @db.Decimal(5, 2)      // solo PORCENTAJE: hasta 999,99 (el service limita a 100)
+  cantidadJornales Decimal?          @db.Decimal(8, 2)      // solo JORNALES: admite fracciones (ej. 2,50)
+  valorJornal      Decimal?          @db.Decimal(15, 2)     // solo JORNALES: valor del jornal diario al momento de liquidar
+
+  // --- Resultado del cálculo (siempre presente) ---
+  tasaIva          TasaIva
+  montoNeto        Decimal           @db.Decimal(15, 2)     // honorario antes de IVA (en MONTO_FIJO es el monto ingresado)
+  montoIva         Decimal           @db.Decimal(15, 2)     // IVA = neto × tasa (se suma encima)
+  montoTotal       Decimal           @db.Decimal(15, 2)     // neto + IVA: lo que se le cobra al cliente
+
+  estado           EstadoLiquidacion @default(PENDIENTE)
+  observaciones    String?           @db.VarChar(300)
+
+  creadoEn         DateTime          @default(now())
+  actualizadoEn    DateTime          @updatedAt
+
+  @@index([expedienteId])
+  @@index([tramiteId])
+  @@index([estado])
+  @@map("liquidaciones_honorarios")
+}
+
+// ------------------------------------------------------------
+// GASTO REEMBOLSABLE
+// Adelanto de dinero del profesional (tasas, notificaciones, copias,
+// viáticos) para reclamar luego al cliente. Se distingue de los
+// honorarios y NO lleva IVA (es devolución de lo desembolsado).
+// Asociación: expediente O trámite (RN-26), igual que la liquidación.
+// El comprobante es un dato referencial: NO se guarda el archivo (RNF 11.5).
+// ------------------------------------------------------------
+model GastoReembolsable {
+  id            Int          @id @default(autoincrement())
+
+  expedienteId  Int?
+  expediente    Expediente?  @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+  tramiteId     Int?
+  tramite       Tramite?     @relation(fields: [tramiteId], references: [id], onDelete: Restrict)
+
+  concepto      String       @db.VarChar(200)       // ej. "Tasa judicial", "Copias del expediente"
+  fecha         DateTime     @db.Date               // día en que se hizo el desembolso (solo fecha, sin hora)
+  monto         Decimal      @db.Decimal(15, 2)     // monto desembolsado, en guaraníes
+  comprobante   String?      @db.VarChar(100)       // referencia opcional (ej. "Factura 001-001-0001234"); no se guarda el archivo
+
+  estado        EstadoGasto  @default(PENDIENTE)
+
+  creadoEn      DateTime     @default(now())
+  actualizadoEn DateTime     @updatedAt
+
+  @@index([expedienteId])
+  @@index([tramiteId])
+  @@index([estado])
+  @@map("gastos_reembolsables")
 }
 
 // ============================================================

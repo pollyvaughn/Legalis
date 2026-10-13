@@ -90,6 +90,12 @@ app.use('/api/tramites/:tramiteId/documentos', protegido, documentosRoutes.porTr
 app.use('/api/expedientes/:expedienteId/documentos', protegido, documentosRoutes.porExpediente);
 app.use('/api/documentos', protegido, documentosRoutes.propias);
 
+// Liquidaciones de honorarios (Módulo 3)
+const liquidacionesRoutes = require('./modules/liquidaciones/liquidaciones.routes');
+app.use('/api/expedientes/:expedienteId/liquidaciones', protegido, liquidacionesRoutes.porExpediente);
+app.use('/api/tramites/:tramiteId/liquidaciones', protegido, liquidacionesRoutes.porTramite);
+app.use('/api/liquidaciones', protegido, liquidacionesRoutes.propias);
+
 // ------------------------------------------
 // MÓDULO 2 — Actuaciones procesales
 // Actuaciones ANIDADAS bajo expediente (crear/listar):
