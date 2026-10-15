@@ -5,6 +5,8 @@
 //  1) por EXPEDIENTE o por TRÁMITE  -> resumen de ese caso
 //  2) por CLIENTE (consolidada)     -> suma de todos sus expedientes y
 //     trámites, con el detalle de cuánto aporta cada uno
+//  3) PANEL GLOBAL (3.4b)           -> totales de todo el estudio + una
+//     fila por cliente con movimientos (pantalla "Honorarios & Gastos")
 //
 // Qué suma: honorarios (neto + IVA) + gastos NO anulados − cobrado.
 // El "cobrado" es 0 hasta el Módulo 4 (ver obtenerCobrado).
@@ -28,6 +30,15 @@ const SIN_ANULADOS = { estado: { not: 'ANULADO' } };
 // ------------------------------------------------------------
 // eslint-disable-next-line no-unused-vars
 const obtenerCobrado = async (where) => 0;
+
+// ------------------------------------------------------------
+// GANCHO 2 PARA EL MÓDULO 4 (panel global)
+// Devuelve un Map { clienteId -> monto cobrado a ese cliente }.
+// Hoy está vacío (no hay cobros): cada cliente figura con cobrado = 0.
+// Módulo 4: sumar los cobros agrupados por cliente en UNA consulta
+// (no una por cliente) y devolverlos en este mismo formato.
+// ------------------------------------------------------------
+const obtenerCobradoPorCliente = async () => new Map();
 
 // ------------------------------------------------------------
 // HELPER: resumenDe
@@ -171,4 +182,122 @@ const resumenDeCliente = async (clienteId) => {
   return { cliente, ...resumen, detalle };
 };
 
-module.exports = { resumenDeExpediente, resumenDeTramite, resumenDeCliente };
+// ------------------------------------------------------------
+// VISTA 3 (3.4b): PANEL GLOBAL de honorarios y gastos
+// Devuelve:
+//   totales   -> suma de TODO el estudio (honorarios, gastos, cobrado, saldo)
+//   clientes  -> una fila por cliente con movimientos, el que más debe primero
+// Regla de siempre: los gastos ANULADOS no suman.
+// Estrategia: 4 consultas en total (no una por cliente):
+//   honorarios y gastos agrupados por expediente/trámite, y luego
+//   se busca de qué cliente es cada expediente/trámite y se suma en memoria.
+// ------------------------------------------------------------
+const resumenGlobal = async () => {
+  const [liqPorPadre, gasPorPadre, cobradoPorCliente] = await Promise.all([
+    prisma.liquidacionHonorarios.groupBy({
+      by: ['expedienteId', 'tramiteId'],
+      _sum: { montoNeto: true, montoIva: true, montoTotal: true },
+      _count: { _all: true },
+    }),
+    prisma.gastoReembolsable.groupBy({
+      by: ['expedienteId', 'tramiteId'],
+      where: SIN_ANULADOS,
+      _sum: { monto: true },
+      _count: { _all: true },
+    }),
+    obtenerCobradoPorCliente(),
+  ]);
+
+  // Ids de expedientes y trámites que tienen movimientos
+  const idsExpediente = new Set();
+  const idsTramite = new Set();
+  [...liqPorPadre, ...gasPorPadre].forEach((g) => {
+    if (g.expedienteId) idsExpediente.add(g.expedienteId);
+    if (g.tramiteId) idsTramite.add(g.tramiteId);
+  });
+
+  // De qué cliente es cada expediente / trámite
+  const [expedientes, tramites] = await Promise.all([
+    prisma.expediente.findMany({
+      where: { id: { in: [...idsExpediente] } },
+      select: { id: true, clienteId: true },
+    }),
+    prisma.tramite.findMany({
+      where: { id: { in: [...idsTramite] } },
+      select: { id: true, clienteId: true },
+    }),
+  ]);
+  const clienteDeExpediente = new Map(expedientes.map((e) => [e.id, e.clienteId]));
+  const clienteDeTramite = new Map(tramites.map((t) => [t.id, t.clienteId]));
+  const clienteDe = (g) =>
+    g.expedienteId ? clienteDeExpediente.get(g.expedienteId) : clienteDeTramite.get(g.tramiteId);
+
+  // Acumulador por cliente y acumulador global (en guaraníes enteros)
+  const porCliente = new Map(); // clienteId -> { honorariosTotal, gastosTotal }
+  const acumulado = (clienteId) => {
+    if (!porCliente.has(clienteId)) porCliente.set(clienteId, { honorariosTotal: 0, gastosTotal: 0 });
+    return porCliente.get(clienteId);
+  };
+  const global = { honorariosNeto: 0, honorariosIva: 0, honorariosTotal: 0, cantLiquidaciones: 0, cantGastos: 0 };
+
+  liqPorPadre.forEach((g) => {
+    const clienteId = clienteDe(g);
+    if (!clienteId) return; // no debería pasar (FK obligatoria), por seguridad
+    acumulado(clienteId).honorariosTotal += aNumero(g._sum.montoTotal);
+    global.honorariosNeto += aNumero(g._sum.montoNeto);
+    global.honorariosIva += aNumero(g._sum.montoIva);
+    global.honorariosTotal += aNumero(g._sum.montoTotal);
+    global.cantLiquidaciones += g._count._all;
+  });
+  gasPorPadre.forEach((g) => {
+    const clienteId = clienteDe(g);
+    if (!clienteId) return;
+    acumulado(clienteId).gastosTotal += aNumero(g._sum.monto);
+    global.cantGastos += g._count._all;
+  });
+
+  // Datos del cliente para mostrar en la tabla
+  const clientes = await prisma.cliente.findMany({
+    where: { id: { in: [...porCliente.keys()] } },
+    select: { id: true, nombreRazonSocial: true, ruc: true, activo: true },
+  });
+
+  // Una fila por cliente, con su saldo (lo que más se debe, primero)
+  const filas = clientes
+    .map((c) => {
+      const { honorariosTotal, gastosTotal } = porCliente.get(c.id);
+      const cobrado = cobradoPorCliente.get(c.id) || 0;
+      return {
+        clienteId: c.id,
+        nombreRazonSocial: c.nombreRazonSocial,
+        ruc: c.ruc,
+        activo: c.activo,
+        honorariosTotal,
+        gastosTotal,
+        ...calcularSaldo({ honorariosTotal, gastosTotal, cobrado }),
+      };
+    })
+    .sort((a, b) => b.saldo - a.saldo || a.nombreRazonSocial.localeCompare(b.nombreRazonSocial));
+
+  // Totales del estudio: suma de las filas (así la tabla siempre cuadra con las tarjetas)
+  const gastosTotal = filas.reduce((suma, f) => suma + f.gastosTotal, 0);
+  const cobrado = filas.reduce((suma, f) => suma + f.cobrado, 0);
+
+  return {
+    totales: {
+      honorarios: {
+        cantidad: global.cantLiquidaciones,
+        neto: global.honorariosNeto,
+        iva: global.honorariosIva,
+        total: global.honorariosTotal,
+      },
+      gastos: { cantidad: global.cantGastos, total: gastosTotal },
+      ...calcularSaldo({ honorariosTotal: global.honorariosTotal, gastosTotal, cobrado }),
+      cantidadClientes: filas.length,
+      clientesConSaldo: filas.filter((f) => f.saldo > 0).length,
+    },
+    clientes: filas,
+  };
+};
+
+module.exports = { resumenDeExpediente, resumenDeTramite, resumenDeCliente, resumenGlobal };

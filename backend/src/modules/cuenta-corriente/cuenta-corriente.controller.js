@@ -45,4 +45,13 @@ const deCliente = async (req, res) => {
   }
 };
 
-module.exports = { deExpediente, deTramite, deCliente };
+// GET /api/cuenta-corriente  (panel global "Honorarios & Gastos", 3.4b)
+const panel = async (req, res) => {
+  try {
+    res.json(await service.resumenGlobal());
+  } catch (err) {
+    responderError(res, err, 'Error al obtener el panel de honorarios y gastos');
+  }
+};
+
+module.exports = { deExpediente, deTramite, deCliente, panel };

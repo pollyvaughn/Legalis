@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { label: "Expedientes", to: "/expedientes", icon: FileText, disponible: true },
   { label: "Asesorías & Trámites", to: "/asesorias", icon: Clock, disponible: true },
   { label: "Calendario & Plazos", to: "/calendario", icon: Calendar, disponible: true },
-  { label: "Honorarios & Gastos", to: "/honorarios", icon: DollarSign, disponible: false, soloAbogado: true },
+  { label: "Honorarios & Gastos", to: "/honorarios", icon: DollarSign, disponible: true, soloAbogado: true },
   { label: "Escritos Forenses", to: "/plantillas", icon: FileSignature, disponible: true },
   { label: "Cobros & Facturación", to: "/cobros", icon: CreditCard, disponible: false, soloAbogado: true },
   // Administración de cuentas: solo la abogada (rol ABOGADO)

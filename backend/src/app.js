@@ -107,6 +107,8 @@ const cuentaCorrienteRoutes = require('./modules/cuenta-corriente/cuenta-corrien
 app.use('/api/expedientes/:expedienteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porExpediente);
 app.use('/api/tramites/:tramiteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porTramite);
 app.use('/api/clientes/:clienteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porCliente);
+// Panel global del menú "Honorarios & Gastos" (3.4b)
+app.use('/api/cuenta-corriente', protegido, cuentaCorrienteRoutes.panel);
 
 // ------------------------------------------
 // MÓDULO 2 — Actuaciones procesales

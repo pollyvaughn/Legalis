@@ -1,6 +1,7 @@
 // ============================================================
 // CUENTA CORRIENTE ROUTES — Módulo 3 (RF8)
-// Exporta tres routers, cada uno se monta en su URL (app.js):
+// Exporta cuatro routers, cada uno se monta en su URL (app.js):
+//  - panel:         /api/cuenta-corriente (resumen global, 3.4b)
 //  - porExpediente: /api/expedientes/:expedienteId/cuenta-corriente
 //  - porTramite:    /api/tramites/:tramiteId/cuenta-corriente
 //  - porCliente:    /api/clientes/:clienteId/cuenta-corriente
@@ -24,4 +25,8 @@ porTramite.get('/', soloAbogado, controller.deTramite); // GET /api/tramites/5/c
 const porCliente = express.Router({ mergeParams: true });
 porCliente.get('/', soloAbogado, controller.deCliente); // GET /api/clientes/5/cuenta-corriente
 
-module.exports = { porExpediente, porTramite, porCliente };
+// Panel global: totales del estudio + una fila por cliente (3.4b)
+const panel = express.Router();
+panel.get('/', soloAbogado, controller.panel); // GET /api/cuenta-corriente
+
+module.exports = { porExpediente, porTramite, porCliente, panel };
