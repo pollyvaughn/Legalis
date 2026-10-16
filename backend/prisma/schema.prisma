@@ -888,7 +888,7 @@ model Cobro {
 // solo acepta enteros).
 // onDelete: Restrict = como los recibos no se borran, sus líneas
 // tampoco.
-// ------------------------------------------------------------
+// -----------------------------------------------------------
 model CobroLinea {
   id        Int            @id @default(autoincrement())
   cobroId   Int
