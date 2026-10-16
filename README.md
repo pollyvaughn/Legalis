@@ -108,3 +108,7 @@ Se recomienda guardar las copias periódicamente en un disco externo.
 backend/    API REST (src/modules/<módulo>: routes → controller → service) y esquema Prisma
 frontend/   Aplicación React (pages, components, constants, utils)
 ```
+
+## Guía de navegación del frontend
+
+Para ubicar rápidamente pantallas, rutas, clases Tailwind y componentes reutilizables, consultá la [Guía rápida para el parcial](./GUIA-PARCIAL-FRONTEND.md).

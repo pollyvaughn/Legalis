@@ -5,6 +5,8 @@
 // utils/calculoHonorarios.js y llegan como ErrorNegocio (400).
 // ============================================================
 const service = require('./liquidaciones.service');
+const proformaService = require('./liquidaciones.proforma.service');
+const { generarProformaPdf } = require('../../utils/generarProformaPdf');
 const { responderError } = require('../../utils/errores');
 const { siVino, entero } = require('../../utils/entrada');
 const { METODOS, TASAS_IVA } = require('../../utils/calculoHonorarios');
@@ -157,6 +159,22 @@ const eliminar = async (req, res) => {
   }
 };
 
+// GET /api/liquidaciones/:id/proforma
+// PDF de la proforma (neto + IVA discriminado + total). Solo lectura.
+const proforma = async (req, res) => {
+  try {
+    const id = idDeUrl(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID inválido' });
+    const { nombreArchivo, ...datos } = await proformaService.armarProforma(id);
+    const buffer = await generarProformaPdf(datos);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+    res.send(buffer);
+  } catch (err) {
+    responderError(res, err, 'Error al generar la proforma', NO_ENCONTRADO);
+  }
+};
+
 module.exports = {
   calcular,
   listarDeExpediente,
@@ -166,4 +184,5 @@ module.exports = {
   obtener,
   actualizar,
   eliminar,
+  proforma,
 };

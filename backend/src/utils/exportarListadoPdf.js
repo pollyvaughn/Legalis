@@ -16,9 +16,11 @@ const PDFDocument = require('pdfkit');
 // Parámetros:
 //   titulo    -> encabezado del documento (ej: "Listado de Clientes")
 //   subtitulo -> línea chica debajo del título (ej: filtros aplicados)
-//   columnas  -> array de { encabezado, ancho } (ancho en puntos,
+//   columnas  -> array de { encabezado, ancho, alinear } (ancho en puntos,
 //                deben sumar aprox. el ancho útil de la hoja: ~451pt
-//                en A4 con margen de 72pt)
+//                en A4 con margen de 72pt). "alinear" es opcional:
+//                'right' alinea la columna a la derecha (para montos);
+//                sin él queda a la izquierda, como siempre.
 //   filas     -> array de arrays de strings, mismo orden que columnas
 //   multilinea -> (opcional, por defecto false) si es true, los textos
 //                largos se parten en varias líneas (la fila crece) en vez
@@ -26,10 +28,15 @@ const PDFDocument = require('pdfkit');
 //                repiten en cada hoja nueva. Pensado para listados con
 //                texto libre (ej: descripción de una actuación). Los
 //                listados de Módulo 1 no lo usan y siguen igual.
+//   totales   -> (opcional, Módulo 3) bloque de totales que se dibuja
+//                a la derecha, debajo de la tabla. Array de
+//                [etiqueta, valor] o [etiqueta, valor, true]; el tercer
+//                elemento (true) resalta la línea en negrita (ej: el
+//                saldo). Los listados de los otros módulos no lo usan.
 //
 // Devuelve una Promise<Buffer> con el PDF ya armado.
 // ------------------------------------------------------------
-const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = false }) =>
+const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = false, totales = [] }) =>
   new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' }); // horizontal: entran más columnas
     const trozos = [];
@@ -51,13 +58,25 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = fa
     doc.moveTo(40, inicioTabla).lineTo(doc.page.width - 40, inicioTabla).strokeColor('#ccc').stroke();
     doc.moveDown(0.5);
 
+    // --- Ancho real del texto de una columna ---
+    // Multilínea deja 6pt de aire entre columnas; las columnas alineadas
+    // a la derecha dejan 8pt más para que el número no toque la columna siguiente.
+    const margenCelda = 6;
+    const anchoTexto = (col) =>
+      col.ancho - (multilinea ? margenCelda : 0) - (col.alinear === 'right' ? 8 : 0);
+    const alineacion = (col) => (col.alinear === 'right' ? 'right' : 'left');
+
     // --- Encabezados de columna (función para poder repetirlos en cada hoja) ---
     const filaAltura = 18;
     const dibujarEncabezados = (yInicial) => {
       let xCol = 40;
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
       columnas.forEach((col) => {
-        doc.text(col.encabezado, xCol, yInicial, { width: col.ancho, ellipsis: true });
+        doc.text(col.encabezado, xCol, yInicial, {
+          width: col.ancho - (col.alinear === 'right' ? 8 : 0),
+          align: alineacion(col),
+          ellipsis: true,
+        });
         xCol += col.ancho;
       });
       const yLinea = yInicial + filaAltura;
@@ -75,12 +94,11 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = fa
       // Modo multilínea: la altura de la fila es la de su celda más alta
       // (heightOfString mide cuánto ocupa el texto al partirse en el ancho
       // de la columna). Modo normal: altura fija, texto cortado con "...".
-      const margenCelda = 6; // aire entre columnas en modo multilínea
       let alturaFila = filaAltura;
       if (multilinea) {
         const alturaTexto = Math.max(
           ...fila.map((valor, i) =>
-            doc.heightOfString(String(valor ?? '—'), { width: columnas[i].ancho - margenCelda })
+            doc.heightOfString(String(valor ?? '—'), { width: anchoTexto(columnas[i]) })
           )
         );
         alturaFila = Math.max(filaAltura, alturaTexto + 8);
@@ -96,8 +114,8 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = fa
       x = 40;
       fila.forEach((valor, i) => {
         const opciones = multilinea
-          ? { width: columnas[i].ancho - margenCelda }
-          : { width: columnas[i].ancho, ellipsis: true };
+          ? { width: anchoTexto(columnas[i]), align: alineacion(columnas[i]) }
+          : { width: anchoTexto(columnas[i]), align: alineacion(columnas[i]), ellipsis: true };
         doc.text(String(valor ?? '—'), x, y, opciones);
         x += columnas[i].ancho;
       });
@@ -108,6 +126,30 @@ const generarListadoPdf = ({ titulo, subtitulo, columnas, filas, multilinea = fa
         doc.moveTo(40, y - 4).lineTo(doc.page.width - 40, y - 4).strokeColor('#eee').stroke();
       }
     });
+
+    // --- Bloque de totales (opcional): a la derecha, debajo de la tabla ---
+    // Si no entra en la hoja actual, pasa entero a una hoja nueva
+    // (así el total nunca queda separado de su etiqueta).
+    if (totales.length > 0) {
+      const alturaLinea = 15;
+      const limiteTotales = doc.page.height - 70; // mismo límite que las filas: deja lugar al pie
+      if (y + 12 + totales.length * alturaLinea > limiteTotales) {
+        doc.addPage();
+        y = 40;
+      }
+      y += 8;
+
+      const derecha = doc.page.width - 40;
+      const xEtiqueta = derecha - 330;
+      doc.moveTo(xEtiqueta, y - 3).lineTo(derecha, y - 3).strokeColor('#999').stroke();
+      totales.forEach(([etiqueta, valor, fuerte]) => {
+        doc.font(fuerte ? 'Helvetica-Bold' : 'Helvetica').fontSize(fuerte ? 10 : 9).fillColor('#000');
+        doc.text(etiqueta, xEtiqueta, y + 2, { width: 200, align: 'right' });
+        doc.text(String(valor), derecha - 120, y + 2, { width: 120, align: 'right' });
+        y += alturaLinea;
+      });
+      doc.font('Helvetica').fontSize(9);
+    }
 
     // --- Pie: fecha de generación + total ---
     doc.moveDown(1);

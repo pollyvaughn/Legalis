@@ -14,6 +14,7 @@
 //
 // Si la respuesta trae "detalle" (vista del CLIENTE) se muestra además una
 // tabla con lo que aporta cada expediente y trámite.
+// Botón "Exportar PDF": descarga el estado de cuenta (GET {urlBase}/exportar).
 // Solo ABOGADO: el padre no debe renderizar esta sección para el asistente.
 // ============================================================
 
@@ -21,6 +22,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
+import { descargarPdf } from '../../utils/descargarPdf';
 import { formatearGs } from '../../utils/moneda';
 import { plural } from '../../utils/textos';
 
@@ -50,6 +53,8 @@ export default function CuentaCorrienteSeccion({ urlBase, refrescar = 0 }) {
   // viejos si la pantalla pasa de un expediente a otro.
   const [resultado, setResultado] = useState(null); // { url, datos }
   const [error, setError] = useState('');
+  const [exportando, setExportando] = useState(false);
+  const [errorPdf, setErrorPdf] = useState('');
 
   useEffect(() => {
     let vigente = true; // evita actualizar el estado si el componente ya cambió
@@ -72,15 +77,36 @@ export default function CuentaCorrienteSeccion({ urlBase, refrescar = 0 }) {
 
   const datos = resultado?.url === urlBase ? resultado.datos : null;
 
+  // ------------------------------------------
+  // EXPORTAR el estado de cuenta a PDF
+  // ------------------------------------------
+  async function exportarPdf() {
+    setExportando(true);
+    setErrorPdf('');
+    try {
+      await descargarPdf(`${urlBase}/exportar`, 'estado-de-cuenta.pdf');
+    } catch (err) {
+      setErrorPdf(err.message);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   return (
     <div>
-      {/* --- Título --- */}
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-gray-900">Cuenta corriente</h2>
-        <p className="text-xs text-gray-400">
-          Honorarios (con IVA) más gastos sin anular, menos lo cobrado.
-        </p>
+      {/* --- Título + exportar --- */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Cuenta corriente</h2>
+          <p className="text-xs text-gray-400">
+            Honorarios (con IVA) más gastos sin anular, menos lo cobrado.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={exportarPdf} disabled={!datos || exportando}>
+          {exportando ? 'Generando...' : 'Exportar PDF'}
+        </Button>
       </div>
+      {errorPdf && <p className="mb-3 text-sm text-red-600">{errorPdf}</p>}
 
       {error ? (
         <p className="text-sm text-red-600">{error}</p>

@@ -10,6 +10,7 @@
 //   - Tabla por cliente (el que más debe primero) con buscador y
 //     enlace al detalle del cliente, donde está su cuenta corriente
 //
+// Botón "Exportar PDF": descarga el panel completo por cliente (GET /cuenta-corriente/exportar).
 // Solo ABOGADO: la ruta se protege en App.jsx y el backend responde
 // 403 al asistente.
 // ============================================================
@@ -18,7 +19,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
 import TablaContainer from '../../components/ui/TablaContainer';
+import { descargarPdf } from '../../utils/descargarPdf';
 import { formatearGs } from '../../utils/moneda';
 import { plural } from '../../utils/textos';
 
@@ -46,6 +49,22 @@ export default function HonorariosResumenPage() {
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [exportando, setExportando] = useState(false);
+
+  // ------------------------------------------
+  // EXPORTAR el panel completo a PDF (todos los clientes con movimientos)
+  // ------------------------------------------
+  async function exportarPdf() {
+    setExportando(true);
+    setError('');
+    try {
+      await descargarPdf('/cuenta-corriente/exportar', 'honorarios-y-gastos-por-cliente.pdf');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExportando(false);
+    }
+  }
 
   // ------------------------------------------
   // CARGA DEL PANEL (una sola vez al entrar a la pantalla)
@@ -79,12 +98,17 @@ export default function HonorariosResumenPage() {
   return (
     <div>
       {/* --- Título --- */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Honorarios & Gastos</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Resumen de lo que se debe por cliente. Los honorarios y gastos se cargan dentro de cada
-          expediente o trámite.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Honorarios & Gastos</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Resumen de lo que se debe por cliente. Los honorarios y gastos se cargan dentro de cada
+            expediente o trámite.
+          </p>
+        </div>
+        <Button variant="secondary" onClick={exportarPdf} disabled={!datos || exportando}>
+          {exportando ? 'Generando...' : 'Exportar PDF'}
+        </Button>
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}

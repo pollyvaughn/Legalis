@@ -17,6 +17,8 @@
 //  - El IVA se SUMA encima del neto (10%, 5% o exenta).
 //  - Editar / eliminar solo si está PENDIENTE (sin cobros).
 //  - El método no se puede cambiar una vez creada la liquidación.
+// Cada liquidación tiene un botón "Proforma" (PDF con neto, IVA discriminado
+// y total; GET /liquidaciones/:id/proforma), en cualquier estado.
 // Solo ABOGADO: el padre no debe renderizar esta sección para el asistente.
 // ============================================================
 
@@ -26,6 +28,7 @@ import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import { Input, SelectInput, Textarea } from '../ui/Input';
 import useScrollHighlight from '../../hooks/useScrollHighlight';
+import { descargarPdf } from '../../utils/descargarPdf';
 import { formatearFecha } from '../../utils/fechas';
 import { formatearGs } from '../../utils/moneda';
 import {
@@ -103,6 +106,8 @@ export default function LiquidacionesSeccion({ urlBase, onChange }) {
 
   // Id de la liquidación que se está por eliminar (confirmación en la propia fila)
   const [borrarId, setBorrarId] = useState(null);
+  // Id de la liquidación cuya proforma se está generando (deshabilita su botón)
+  const [proformaId, setProformaId] = useState(null);
 
   const formularioFocus = useScrollHighlight(form !== null, form?.id ?? 'nueva-liquidacion');
 
@@ -239,6 +244,21 @@ export default function LiquidacionesSeccion({ urlBase, onChange }) {
       setError(err.response?.data?.error || 'No se pudo eliminar la liquidación');
     } finally {
       setBorrarId(null);
+    }
+  }
+
+  // ------------------------------------------
+  // PROFORMA en PDF de una liquidación
+  // ------------------------------------------
+  async function descargarProforma(id) {
+    setError('');
+    setProformaId(id);
+    try {
+      await descargarPdf(`/liquidaciones/${id}/proforma`, `proforma-${id}.pdf`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProformaId(null);
     }
   }
 
@@ -450,8 +470,8 @@ export default function LiquidacionesSeccion({ urlBase, onChange }) {
                     : `Neto ${formatearGs(liq.montoNeto)} + IVA ${formatearGs(liq.montoIva)}`}
                 </p>
 
-                {/* Editar / eliminar: solo si no tiene cobros */}
-                {liq.estado === 'PENDIENTE' && !form && (
+                {/* Acciones: proforma (siempre) + editar / eliminar (solo si no tiene cobros) */}
+                {!form && (
                   <div className="mt-1 flex items-center justify-end gap-1">
                     {borrarId === liq.id ? (
                       <>
@@ -465,18 +485,31 @@ export default function LiquidacionesSeccion({ urlBase, onChange }) {
                       </>
                     ) : (
                       <>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => abrirEditar(liq)}>
-                          Editar
-                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                          onClick={() => setBorrarId(liq.id)}
+                          onClick={() => descargarProforma(liq.id)}
+                          disabled={proformaId === liq.id}
                         >
-                          Eliminar
+                          {proformaId === liq.id ? 'Generando...' : 'Proforma'}
                         </Button>
+                        {liq.estado === 'PENDIENTE' && (
+                          <>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => abrirEditar(liq)}>
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => setBorrarId(liq.id)}
+                            >
+                              Eliminar
+                            </Button>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

@@ -30,6 +30,7 @@ porTramite.post('/', soloAbogado, controller.crearEnTramite);          // POST /
 // /calcular va ANTES de /:id, o "calcular" se tomaría como un id.
 const propias = express.Router();
 propias.get('/calcular', soloAbogado, controller.calcular);   // GET    /api/liquidaciones/calcular?...
+propias.get('/:id/proforma', soloAbogado, controller.proforma); // GET   /api/liquidaciones/5/proforma (PDF)
 propias.get('/:id', soloAbogado, controller.obtener);         // GET    /api/liquidaciones/5
 propias.put('/:id', soloAbogado, controller.actualizar);      // PUT    /api/liquidaciones/5
 propias.delete('/:id', soloAbogado, controller.eliminar);     // DELETE /api/liquidaciones/5
