@@ -218,7 +218,10 @@ const generarSiguienteAnio = async (id, usuarioId) => {
 // HELPER: criterioFuturosSeguros
 // Vencimientos de una obligación que se pueden borrar sin perder
 // historial: futuros (después de hoy), todavía PENDIENTES y sin
-// documentos. Si se pasa "anio", solo los de ese año (por el "periodo").
+// documentos, SIN honorarios y SIN gastos (Módulo 3: si la abogada ya
+// cargó el honorario mensual en ese trámite, no se descarta; además
+// la FK es Restrict y un deleteMany fallaba con un 500).
+// Si se pasa "anio", solo los de ese año (por el "periodo").
 // Lo usan la edición de la obligación y "quitar futuros".
 // ------------------------------------------------------------
 const criterioFuturosSeguros = (obligacionId, hoy, anio) => ({
@@ -226,6 +229,8 @@ const criterioFuturosSeguros = (obligacionId, hoy, anio) => ({
   estado: 'PENDIENTE',
   fechaVencimiento: { gt: hoy },
   documentos: { none: {} },
+  liquidaciones: { none: {} },
+  gastos: { none: {} },
   ...(anio && { periodo: { startsWith: `${anio}-` } }),
 });
 

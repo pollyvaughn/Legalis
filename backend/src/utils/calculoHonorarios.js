@@ -26,14 +26,47 @@ const METODOS = ['PORCENTAJE', 'JORNALES', 'MONTO_FIJO'];
 const TASAS_IVA = { IVA_10: 10, IVA_5: 5, EXENTA: 0 };
 
 // ------------------------------------------------------------
+// TOPES DE COLUMNA (deben coincidir con schema.prisma)
+// Si un valor supera el tope de su columna, Postgres rechaza el
+// INSERT y el usuario vería un 500 genérico: por eso se controla
+// ACÁ, antes de guardar, y se responde un 400 claro.
+//  - Decimal(15,2) -> 13 dígitos enteros (montoBase, valorJornal, montos)
+//  - Decimal(8,2)  -> hasta 999.999,99 (cantidadJornales)
+// ------------------------------------------------------------
+const MONTO_MAXIMO = 9999999999999;
+const JORNALES_MAXIMO = 999999.99;
+
+// ------------------------------------------------------------
 // Helper: convierte a número y exige que sea > 0.
 // Number() también sirve con los Decimal de Prisma y con strings
 // que llegan del formulario ("1500000").
+// Number(true) da 1 y Number([5]) da 5: se rechazan a propósito
+// (un booleano o un array no es un monto).
 // ------------------------------------------------------------
 function numeroPositivo(valor, nombreCampo) {
   const n = Number(valor);
-  if (valor === null || valor === undefined || valor === '' || !Number.isFinite(n) || n <= 0) {
+  if (
+    valor === null || valor === undefined || valor === '' ||
+    typeof valor === 'boolean' || Array.isArray(valor) ||
+    !Number.isFinite(n) || n <= 0
+  ) {
     throw new ErrorNegocio(`${nombreCampo} debe ser un número mayor a 0`);
+  }
+  return n;
+}
+
+// ------------------------------------------------------------
+// Helper: monto en guaraníes -> > 0, entero (sin decimales) y con tope.
+// Lo usan monto base, valor del jornal y monto fijo (misma regla que
+// los gastos: guaraníes enteros, decisión de Yael 13/10/2026).
+// ------------------------------------------------------------
+function montoEnGuaranies(valor, nombreCampo) {
+  const n = numeroPositivo(valor, nombreCampo);
+  if (!Number.isInteger(n)) {
+    throw new ErrorNegocio(`${nombreCampo} se expresa en guaraníes enteros, sin decimales`);
+  }
+  if (n > MONTO_MAXIMO) {
+    throw new ErrorNegocio(`${nombreCampo} supera el máximo permitido`);
   }
   return n;
 }
@@ -60,7 +93,7 @@ function aCentesimas(n, nombreCampo) {
 // ------------------------------------------------------------
 function calcularNeto({ metodo, montoBase, porcentaje, cantidadJornales, valorJornal, montoFijo }) {
   if (metodo === 'PORCENTAJE') {
-    const base = numeroPositivo(montoBase, 'El monto base');
+    const base = montoEnGuaranies(montoBase, 'El monto base');
     const pct = numeroPositivo(porcentaje, 'El porcentaje');
     if (pct > 100) throw new ErrorNegocio('El porcentaje no puede ser mayor a 100');
     // porcentaje en centésimas (12,5% -> 1250) para dividir por 10.000 exacto
@@ -69,13 +102,14 @@ function calcularNeto({ metodo, montoBase, porcentaje, cantidadJornales, valorJo
 
   if (metodo === 'JORNALES') {
     const jornales = numeroPositivo(cantidadJornales, 'La cantidad de jornales');
-    const valor = numeroPositivo(valorJornal, 'El valor del jornal');
+    if (jornales > JORNALES_MAXIMO) throw new ErrorNegocio('La cantidad de jornales supera el máximo permitido');
+    const valor = montoEnGuaranies(valorJornal, 'El valor del jornal');
     // jornales en centésimas (2,5 -> 250) para dividir por 100 exacto
     return Math.round((aCentesimas(jornales, 'La cantidad de jornales') * valor) / 100);
   }
 
   if (metodo === 'MONTO_FIJO') {
-    return Math.round(numeroPositivo(montoFijo, 'El monto a cobrar'));
+    return montoEnGuaranies(montoFijo, 'El monto a cobrar');
   }
 
   throw new ErrorNegocio(`Método de cálculo inválido. Valores permitidos: ${METODOS.join(', ')}`);
@@ -103,4 +137,4 @@ function calcularLiquidacion(datos) {
   return { montoNeto, montoIva, montoTotal };
 }
 
-module.exports = { METODOS, TASAS_IVA, calcularLiquidacion };
+module.exports = { METODOS, TASAS_IVA, MONTO_MAXIMO, calcularLiquidacion };

@@ -197,7 +197,7 @@ const actualizarTramite = async (id, datos, usuarioId) => {
 const eliminarTramite = async (id, usuarioId) => {
   const tramite = await prisma.tramite.findUnique({
     where: { id },
-    include: { ...INCLUIR_LISTA, _count: { select: { documentos: true } } },
+    include: { ...INCLUIR_LISTA, _count: { select: { documentos: true, liquidaciones: true, gastos: true } } },
   });
   if (!tramite) throw new ErrorNegocio('Trámite no encontrado', 404);
 
@@ -209,6 +209,14 @@ const eliminarTramite = async (id, usuarioId) => {
   }
   if (tramite._count.documentos > 0) {
     throw new ErrorNegocio('El trámite tiene documentos registrados; no se puede eliminar.', 409);
+  }
+  // Módulo 3: con honorarios o gastos cargados no se borra (FK Restrict).
+  // Se avisa con un mensaje claro en vez de dejar que Postgres falle con un 500.
+  if (tramite._count.liquidaciones > 0 || tramite._count.gastos > 0) {
+    throw new ErrorNegocio(
+      'El trámite tiene honorarios o gastos registrados (los gastos anulados también quedan como registro); no se puede eliminar. Si ya no aplica, marcalo como finalizado.',
+      409
+    );
   }
 
   return prisma.$transaction(async (tx) => {

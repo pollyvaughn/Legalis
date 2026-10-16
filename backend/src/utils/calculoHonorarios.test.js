@@ -87,3 +87,52 @@ test('método o tasa de IVA inválidos se rechazan', () => {
   assert.throws(() => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: 1000, tasaIva: 'IVA_21' }), /IVA/);
   assert.throws(() => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: 1000 }), /IVA/);
 });
+// ---------- TOPES DE COLUMNA Y TIPOS (cierre 3.6) ----------
+// Sin estos controles, Postgres rechazaba el INSERT (columna Decimal) y
+// el usuario veía un 500 genérico en vez de un mensaje claro.
+test('tope: monto base, valor del jornal y monto fijo no pueden superar los 13 dígitos', () => {
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'PORCENTAJE', montoBase: 1e15, porcentaje: 0.01, tasaIva: 'EXENTA' }),
+    /monto base supera el máximo/
+  );
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'JORNALES', cantidadJornales: 0.01, valorJornal: 1e14, tasaIva: 'EXENTA' }),
+    /valor del jornal supera el máximo/
+  );
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: 1e14, tasaIva: 'EXENTA' }),
+    /monto a cobrar supera el máximo/
+  );
+});
+
+test('tope: la cantidad de jornales no puede superar 999.999,99 (columna Decimal(8,2))', () => {
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'JORNALES', cantidadJornales: 1000000, valorJornal: 1, tasaIva: 'EXENTA' }),
+    /jornales supera el máximo/
+  );
+});
+
+test('guaraníes enteros: monto base, valor del jornal y monto fijo no admiten decimales', () => {
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: 1500.5, tasaIva: 'EXENTA' }),
+    /enteros, sin decimales/
+  );
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'PORCENTAJE', montoBase: 1000.55, porcentaje: 10, tasaIva: 'EXENTA' }),
+    /enteros, sin decimales/
+  );
+  assert.throws(
+    () => calcularLiquidacion({ metodo: 'JORNALES', cantidadJornales: 2, valorJornal: 100.5, tasaIva: 'EXENTA' }),
+    /enteros, sin decimales/
+  );
+});
+
+test('tipos: un booleano o un array no son un monto válido', () => {
+  assert.throws(() => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: true, tasaIva: 'EXENTA' }), ErrorNegocio);
+  assert.throws(() => calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: [5], tasaIva: 'EXENTA' }), ErrorNegocio);
+});
+
+test('en el límite: 13 dígitos exactos es válido', () => {
+  const r = calcularLiquidacion({ metodo: 'MONTO_FIJO', montoFijo: 9999999999999, tasaIva: 'EXENTA' });
+  assert.equal(r.montoTotal, 9999999999999);
+});
