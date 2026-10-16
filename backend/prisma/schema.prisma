@@ -112,6 +112,7 @@ model Cliente {
 
   obligaciones  ObligacionPeriodica[]   // Módulo 1.3
   tramites      Tramite[]               // Módulo 1.3
+  cobros        Cobro[]                 // (Módulo 4): recibos de cobro emitidos a este cliente
   @@map("clientes") // nombre real de la tabla en PostgreSQL (snake_case, convención SQL)
 }
 
@@ -194,6 +195,7 @@ model Expediente {
   plazosJudiciales PlazoJudicial[]
   liquidaciones   LiquidacionHonorarios[] // (Módulo 3): honorarios liquidados sobre este expediente
   gastos          GastoReembolsable[]     // (Módulo 3): gastos adelantados en este expediente
+  cobros          Cobro[]                 // (Módulo 4): recibos de cobro de este expediente
   @@map("expedientes")
 }
 
@@ -263,6 +265,8 @@ model User {
   updatedAt    DateTime   @updatedAt
   
   auditorias   Auditoria[]   // historial de acciones de este usuario
+  cobrosCreados  Cobro[] @relation("CobroCreadoPor")   // (Módulo 4): recibos emitidos por este usuario
+  cobrosAnulados Cobro[] @relation("CobroAnuladoPor")  // (Módulo 4): recibos anulados por este usuario
 
   @@map("users")
 }
@@ -406,6 +410,7 @@ model Tramite {
 
   liquidaciones    LiquidacionHonorarios[] // (Módulo 3): honorarios liquidados sobre este trámite
   gastos           GastoReembolsable[]     // (Módulo 3): gastos adelantados en este trámite
+  cobros           Cobro[]                 // (Módulo 4): recibos de cobro de este trámite
 
   // Evita generar dos veces el mismo período de una obligación.
   // (Postgres trata los NULL como distintos: los trámites únicos no chocan entre sí.)
@@ -783,6 +788,120 @@ model GastoReembolsable {
 }
 
 // ============================================================
+// MÓDULO 4 — COBROS Y RECIBOS (RF10)
+// Un recibo (Cobro) registra plata recibida de un cliente. Tiene hasta
+// 3 líneas (CobroLinea): honorarios, devolución de gastos y anticipo.
+// Las reglas viven en utils/calculoCobros.js y en el service.
+// ============================================================
+
+// ------------------------------------------------------------
+// MÉTODO DE PAGO. Valores propuestos: la carpeta no los define y
+// queda por confirmar con la abogada.
+// ------------------------------------------------------------
+enum MetodoPago {
+  EFECTIVO
+  TRANSFERENCIA
+  CHEQUE
+  OTRO
+}
+
+// ------------------------------------------------------------
+// ESTADO DE UN RECIBO (RN-35)
+// Los recibos NO se eliminan: se anulan y conservan su número.
+// ------------------------------------------------------------
+enum EstadoCobro {
+  EMITIDO
+  ANULADO
+}
+
+// ------------------------------------------------------------
+// TIPO DE LÍNEA DE UN RECIBO (RN-31 / RN-32)
+// HONORARIOS -> cobro de honorarios liquidados
+// GASTOS     -> devolución de gastos reembolsables
+// ANTICIPO   -> pago a cuenta: solo resta del saldo, no se aplica a
+//               ninguna liquidación (decisión 16/10/2026)
+// ------------------------------------------------------------
+enum TipoLineaCobro {
+  HONORARIOS
+  GASTOS
+  ANTICIPO
+}
+
+// ------------------------------------------------------------
+// COBRO (recibo interno)
+// Pertenece a un expediente O a un trámite (RN-31): uno de los dos,
+// nunca ambos ni ninguno. Esa regla la valida el service (Prisma no
+// tiene CHECK), mismo patrón que LiquidacionHonorarios.
+// clienteId se guarda para listar el historial por cliente; el
+// service verifica que coincida con el dueño del expediente/trámite.
+//
+// numero: correlativo desde 1, no se reutiliza (RN-34). @unique
+// impide duplicados; el service lo calcula como máximo + 1 dentro de
+// la transacción (los anulados cuentan, así el número no se reusa).
+//
+// onDelete: Restrict = no se puede borrar un expediente, trámite,
+// cliente o usuario que tenga recibos.
+// ------------------------------------------------------------
+model Cobro {
+  id               Int          @id @default(autoincrement())
+  numero           Int          @unique                  // número de recibo correlativo (RN-34)
+
+  clienteId        Int
+  cliente          Cliente      @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  expedienteId     Int?
+  expediente       Expediente?  @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+  tramiteId        Int?
+  tramite          Tramite?     @relation(fields: [tramiteId], references: [id], onDelete: Restrict)
+
+  fecha            DateTime     @db.Date                 // día del cobro (solo fecha, sin hora); no puede ser futura
+  metodoPago       MetodoPago
+  referenciaPago   String?      @db.VarChar(100)         // opcional: nº de transferencia o de cheque
+  concepto         String?      @db.VarChar(200)         // texto libre del recibo
+  estado           EstadoCobro  @default(EMITIDO)
+
+  // Se completan solo al anular (RN-35)
+  anuladoEn        DateTime?                             // fecha y hora de la anulación
+  motivoAnulacion  String?      @db.VarChar(300)         // obligatorio al anular (lo valida el service)
+  anuladoPorId     Int?
+  anuladoPor       User?        @relation("CobroAnuladoPor", fields: [anuladoPorId], references: [id], onDelete: Restrict)
+
+  creadoPorId      Int
+  creadoPor        User         @relation("CobroCreadoPor", fields: [creadoPorId], references: [id], onDelete: Restrict)
+  creadoEn         DateTime     @default(now())
+  actualizadoEn    DateTime     @updatedAt
+
+  lineas           CobroLinea[]
+
+  @@index([clienteId])
+  @@index([expedienteId])
+  @@index([tramiteId])
+  @@index([fecha])
+  @@index([estado])
+  @@map("cobros")
+}
+
+// ------------------------------------------------------------
+// LÍNEA DE COBRO: una por tipo dentro de cada recibo (RN-31).
+// Que no haya dos líneas del mismo tipo lo garantiza @@unique.
+// monto en guaraníes enteros: Decimal(15,2) igual que honorarios
+// y gastos (15 dígitos en total, 2 de ellos decimales; el service
+// solo acepta enteros).
+// onDelete: Restrict = como los recibos no se borran, sus líneas
+// tampoco.
+// ------------------------------------------------------------
+model CobroLinea {
+  id        Int            @id @default(autoincrement())
+  cobroId   Int
+  cobro     Cobro          @relation(fields: [cobroId], references: [id], onDelete: Restrict)
+
+  tipo      TipoLineaCobro
+  monto     Decimal        @db.Decimal(15, 2)
+
+  @@unique([cobroId, tipo])
+  @@map("cobros_lineas")
+}
+
+// ============================================================
 // AUDITORÍA (RNF 11.6 / RN-41)
 // Registra quién hizo qué y cuándo sobre las operaciones
 // relevantes del sistema. Solo consulta para el ABOGADO.
@@ -799,8 +918,8 @@ enum AccionAuditoria {
   REACTIVAR
   ELIMINAR
   BAJA        // baja definitiva de obligación periódica
-  COBRAR      // reservado para Módulo 4
-  ANULAR      // reservado para Módulo 4 (recibos)
+  COBRAR      // registrar un cobro y emitir su recibo (Módulo 4)
+  ANULAR      // anular un gasto (Módulo 3) o un recibo (Módulo 4)
 }
 
 model Auditoria {
