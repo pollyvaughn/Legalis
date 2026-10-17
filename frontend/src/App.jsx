@@ -26,6 +26,7 @@ import CatalogoTiposPlazoPage from './pages/calendario/CatalogoTiposPlazoPage';
 import CatalogoDiasNoHabilesPage from './pages/calendario/CatalogoDiasNoHabilesPage';
 import AuditoriaPage from './pages/auditoria/AuditoriaPage';
 import HonorariosResumenPage from './pages/honorarios/HonorariosResumenPage';
+import CobrosPage from './pages/cobros/CobrosPage';
 
 function App() {
   return (
@@ -159,13 +160,13 @@ function App() {
           }
         />
 
-        {/* --- Cobros & Facturación: aún sin desarrollar (Módulo 4, solo ABOGADO) --- */}
+        {/* --- Cobros & Facturación: listado de recibos (Módulo 4, solo ABOGADO) --- */}
         <Route
           path="/cobros"
           element={
             <RutaProtegida soloAbogado>
               <AppLayout>
-                <ProximamentePage />
+                <CobrosPage />
               </AppLayout>
             </RutaProtegida>
           }

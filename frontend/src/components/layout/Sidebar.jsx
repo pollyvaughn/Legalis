@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   { label: "Calendario & Plazos", to: "/calendario", icon: Calendar, disponible: true },
   { label: "Honorarios & Gastos", to: "/honorarios", icon: DollarSign, disponible: true, soloAbogado: true },
   { label: "Escritos Forenses", to: "/plantillas", icon: FileSignature, disponible: true },
-  { label: "Cobros & Facturación", to: "/cobros", icon: CreditCard, disponible: false, soloAbogado: true },
+  { label: "Cobros & Facturación", to: "/cobros", icon: CreditCard, disponible: true, soloAbogado: true },
   // Administración de cuentas: solo la abogada (rol ABOGADO)
   { label: "Gestión de usuarios", to: "/usuarios", icon: ShieldCheck, disponible: true, soloAbogado: true },
   { label: "Auditoría", to: "/auditoria", icon: History, disponible: true, soloAbogado: true },];

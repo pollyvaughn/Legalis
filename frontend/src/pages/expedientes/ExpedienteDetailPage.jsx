@@ -34,6 +34,7 @@ import PartesSeccion from '../../components/expedientes/PartesSeccion';
 import LiquidacionesSeccion from '../../components/honorarios/LiquidacionesSeccion';
 import GastosSeccion from '../../components/honorarios/GastosSeccion';
 import CuentaCorrienteSeccion from '../../components/honorarios/CuentaCorrienteSeccion';
+import CobrosSeccion from '../../components/cobros/CobrosSeccion';
 
 // Muestra el valor, o un guión si está vacío/null — evita que
 // la lista de partes se vea inconsistente entre sí (ver backlog).
@@ -77,9 +78,18 @@ function ExpedienteDetailPage() {
   const [actuacionIdParaPlazo, setActuacionIdParaPlazo] = useState('');
   const [errorPlazos, setErrorPlazos] = useState('');
 
-  // Sube cada vez que cambian honorarios o gastos, para refrescar la cuenta corriente (Módulo 3)
+  // Sube cada vez que cambian honorarios, gastos o cobros, para refrescar la cuenta corriente (Módulos 3 y 4)
   const [versionCuenta, setVersionCuenta] = useState(0);
   const avisarCambioCuenta = () => setVersionCuenta((v) => v + 1);
+
+  // Sube cada vez que se registra o anula un cobro (Módulo 4). Se usa como "key" de las listas
+  // de liquidaciones y gastos: al cambiar se vuelven a cargar y muestran su estado actualizado
+  // (Pendiente / Cobrado parcialmente / Cobrado), que el backend recalcula con cada cobro.
+  const [versionCobros, setVersionCobros] = useState(0);
+  const avisarCambioCobros = () => {
+    setVersionCuenta((v) => v + 1); // la cuenta corriente también cambia
+    setVersionCobros((v) => v + 1);
+  };
 
   // ------------------------------------------
   // Trae el expediente del backend. Pide incluirInactivos=true
@@ -459,12 +469,28 @@ useEffect(() => {
       )}
       {esAbogado && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-          <LiquidacionesSeccion urlBase={`/expedientes/${id}/liquidaciones`} onChange={avisarCambioCuenta} />
+          <LiquidacionesSeccion
+            key={versionCobros}
+            urlBase={`/expedientes/${id}/liquidaciones`}
+            onChange={avisarCambioCuenta}
+          />
         </div>
       )}
       {esAbogado && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-          <GastosSeccion urlBase={`/expedientes/${id}/gastos`} onChange={avisarCambioCuenta} />
+          <GastosSeccion key={versionCobros} urlBase={`/expedientes/${id}/gastos`} onChange={avisarCambioCuenta} />
+        </div>
+      )}
+
+      {/* --- Cobros y recibos del expediente (Módulo 4): solo ABOGADO --- */}
+      {esAbogado && (
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
+          <CobrosSeccion
+            urlBase={`/expedientes/${id}/cobros`}
+            urlCuenta={`/expedientes/${id}/cuenta-corriente`}
+            onChange={avisarCambioCobros}
+            refrescar={versionCuenta}
+          />
         </div>
       )}
 

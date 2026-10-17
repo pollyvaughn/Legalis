@@ -24,6 +24,7 @@ import DocumentosSeccion from './DocumentosSeccion';
 import LiquidacionesSeccion from '../honorarios/LiquidacionesSeccion';
 import GastosSeccion from '../honorarios/GastosSeccion';
 import CuentaCorrienteSeccion from '../honorarios/CuentaCorrienteSeccion';
+import CobrosSeccion from '../cobros/CobrosSeccion';
 import { useAuth } from '../../context/AuthContext';
 
 // Un dato del encabezado: etiqueta chica arriba, valor abajo
@@ -50,9 +51,18 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
   // Eliminar: confirmación en dos pasos, dentro del mismo modal
   const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
-  // Sube cada vez que cambian honorarios o gastos, para refrescar la cuenta corriente (Módulo 3)
+  // Sube cada vez que cambian honorarios, gastos o cobros, para refrescar la cuenta corriente (Módulos 3 y 4)
   const [versionCuenta, setVersionCuenta] = useState(0);
   const avisarCambioCuenta = () => setVersionCuenta((v) => v + 1);
+
+  // Sube cada vez que se registra o anula un cobro (Módulo 4). Se usa como "key" de las listas
+  // de liquidaciones y gastos: al cambiar se vuelven a cargar y muestran su estado actualizado
+  // (Pendiente / Cobrado parcialmente / Cobrado), que el backend recalcula con cada cobro.
+  const [versionCobros, setVersionCobros] = useState(0);
+  const avisarCambioCobros = () => {
+    setVersionCuenta((v) => v + 1); // la cuenta corriente también cambia
+    setVersionCobros((v) => v + 1);
+  };
 
   // Guarda el trámite y sincroniza el formulario con sus datos
   function aplicar(datos) {
@@ -254,12 +264,27 @@ export default function TramiteDetalleModal({ tramiteId, onClose, onCambio }) {
           )}
           {esAbogado && (
             <div className="border-t border-gray-100 pt-5">
-              <LiquidacionesSeccion urlBase={`/tramites/${tramiteId}/liquidaciones`} onChange={avisarCambioCuenta} />
+              <LiquidacionesSeccion
+                key={versionCobros}
+                urlBase={`/tramites/${tramiteId}/liquidaciones`}
+                onChange={avisarCambioCuenta}
+              />
             </div>
           )}
           {esAbogado && (
             <div className="border-t border-gray-100 pt-5">
-              <GastosSeccion urlBase={`/tramites/${tramiteId}/gastos`} onChange={avisarCambioCuenta} />
+              <GastosSeccion key={versionCobros} urlBase={`/tramites/${tramiteId}/gastos`} onChange={avisarCambioCuenta} />
+            </div>
+          )}
+          {/* --- Cobros y recibos del trámite (Módulo 4): solo ABOGADO --- */}
+          {esAbogado && (
+            <div className="border-t border-gray-100 pt-5">
+              <CobrosSeccion
+                urlBase={`/tramites/${tramiteId}/cobros`}
+                urlCuenta={`/tramites/${tramiteId}/cuenta-corriente`}
+                onChange={avisarCambioCobros}
+                refrescar={versionCuenta}
+              />
             </div>
           )}
 
