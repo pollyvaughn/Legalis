@@ -102,6 +102,12 @@ app.use('/api/expedientes/:expedienteId/gastos', protegido, gastosRoutes.porExpe
 app.use('/api/tramites/:tramiteId/gastos', protegido, gastosRoutes.porTramite);
 app.use('/api/gastos', protegido, gastosRoutes.propias);
 
+// Cobros y recibos (Módulo 4)
+const cobrosRoutes = require('./modules/cobros/cobros.routes');
+app.use('/api/expedientes/:expedienteId/cobros', protegido, cobrosRoutes.porExpediente);
+app.use('/api/tramites/:tramiteId/cobros', protegido, cobrosRoutes.porTramite);
+app.use('/api/cobros', protegido, cobrosRoutes.propias);
+
 // Cuenta corriente (Módulo 3, solo lectura): por expediente, por trámite y consolidada por cliente
 const cuentaCorrienteRoutes = require('./modules/cuenta-corriente/cuenta-corriente.routes');
 app.use('/api/expedientes/:expedienteId/cuenta-corriente', protegido, cuentaCorrienteRoutes.porExpediente);

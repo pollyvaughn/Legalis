@@ -9,7 +9,9 @@
 //     fila por cliente con movimientos (pantalla "Honorarios & Gastos")
 //
 // Qué suma: honorarios (neto + IVA) + gastos NO anulados − cobrado.
-// El "cobrado" es 0 hasta el Módulo 4 (ver obtenerCobrado).
+// El "cobrado" sale de los recibos EMITIDOS del Módulo 4 (ver obtenerCobrado):
+// suma las líneas de honorarios, gastos Y anticipos. Si lo cobrado supera lo
+// liquidado, el saldo da NEGATIVO = saldo a favor del cliente.
 // ============================================================
 const prisma = require('../../config/database');
 const { ErrorNegocio } = require('../../utils/errores');
@@ -23,22 +25,39 @@ const aNumero = (valor) => Number(valor ?? 0);
 const SIN_ANULADOS = { estado: { not: 'ANULADO' } };
 
 // ------------------------------------------------------------
-// GANCHO PARA EL MÓDULO 4 (cobros y recibos)
-// Hoy no existen cobros, así que lo cobrado es 0. Cuando exista el
-// Módulo 4, esta función debe sumar los cobros aplicados a las
-// liquidaciones y gastos que cumplan el filtro "where".
+// COBRADO (Módulo 4)
+// Suma TODAS las líneas (honorarios, gastos y anticipos) de los recibos
+// EMITIDOS que cumplan el filtro "where". Los recibos anulados no
+// cuentan: sus importes vuelven al saldo (RN-35).
+// "where" es el mismo filtro que usa resumenDe ({ expedienteId },
+// { tramiteId } o el OR de un cliente): el recibo tiene esos mismos campos.
 // ------------------------------------------------------------
-// eslint-disable-next-line no-unused-vars
-const obtenerCobrado = async (where) => 0;
+const obtenerCobrado = async (where) => {
+  const r = await prisma.cobroLinea.aggregate({
+    where: { cobro: { ...where, estado: 'EMITIDO' } },
+    _sum: { monto: true },
+  });
+  return aNumero(r._sum.monto);
+};
 
 // ------------------------------------------------------------
-// GANCHO 2 PARA EL MÓDULO 4 (panel global)
-// Devuelve un Map { clienteId -> monto cobrado a ese cliente }.
-// Hoy está vacío (no hay cobros): cada cliente figura con cobrado = 0.
-// Módulo 4: sumar los cobros agrupados por cliente en UNA consulta
-// (no una por cliente) y devolverlos en este mismo formato.
+// COBRADO POR CLIENTE (panel global, Módulo 4)
+// Devuelve un Map { clienteId -> monto cobrado a ese cliente } con los
+// recibos EMITIDOS (honorarios + gastos + anticipos). Una sola consulta
+// para todos los clientes; los que no cobraron nada no figuran.
 // ------------------------------------------------------------
-const obtenerCobradoPorCliente = async () => new Map();
+const obtenerCobradoPorCliente = async () => {
+  const cobros = await prisma.cobro.findMany({
+    where: { estado: 'EMITIDO' },
+    select: { clienteId: true, lineas: { select: { monto: true } } },
+  });
+  const porCliente = new Map();
+  for (const c of cobros) {
+    const total = c.lineas.reduce((suma, l) => suma + aNumero(l.monto), 0);
+    porCliente.set(c.clienteId, (porCliente.get(c.clienteId) || 0) + total);
+  }
+  return porCliente;
+};
 
 // ------------------------------------------------------------
 // HELPER: resumenDe
@@ -117,7 +136,7 @@ const resumenDeCliente = async (clienteId) => {
   const where = { OR: [{ expediente: { clienteId } }, { tramite: { clienteId } }] };
 
   // Totales por expediente/trámite (una fila por cada uno que tenga movimientos)
-  const [resumen, liqPorPadre, gasPorPadre] = await Promise.all([
+  const [resumen, liqPorPadre, gasPorPadre, cobrosCliente] = await Promise.all([
     resumenDe(where),
     prisma.liquidacionHonorarios.groupBy({
       by: ['expedienteId', 'tramiteId'],
@@ -129,15 +148,20 @@ const resumenDeCliente = async (clienteId) => {
       where: { ...where, ...SIN_ANULADOS },
       _sum: { monto: true },
     }),
+    // Recibos EMITIDOS del cliente (con sus líneas) para repartir lo cobrado por expediente/trámite
+    prisma.cobro.findMany({
+      where: { clienteId, estado: 'EMITIDO' },
+      select: { expedienteId: true, tramiteId: true, lineas: { select: { monto: true } } },
+    }),
   ]);
 
-  // Une honorarios y gastos de cada expediente/trámite en una sola fila
+  // Une honorarios, gastos y cobros de cada expediente/trámite en una sola fila
   const filas = new Map(); // clave: "E5" (expediente 5) o "T3" (trámite 3)
   const fila = (expedienteId, tramiteId) => {
     const tipo = expedienteId ? 'EXPEDIENTE' : 'TRAMITE';
     const id = expedienteId || tramiteId;
     const clave = `${tipo[0]}${id}`;
-    if (!filas.has(clave)) filas.set(clave, { tipo, id, honorariosTotal: 0, gastosTotal: 0 });
+    if (!filas.has(clave)) filas.set(clave, { tipo, id, honorariosTotal: 0, gastosTotal: 0, cobrado: 0 });
     return filas.get(clave);
   };
   liqPorPadre.forEach((g) => {
@@ -145,6 +169,10 @@ const resumenDeCliente = async (clienteId) => {
   });
   gasPorPadre.forEach((g) => {
     fila(g.expedienteId, g.tramiteId).gastosTotal = aNumero(g._sum.monto);
+  });
+  // Un expediente con solo un anticipo (sin honorarios ni gastos) también aparece
+  cobrosCliente.forEach((c) => {
+    fila(c.expedienteId, c.tramiteId).cobrado += c.lineas.reduce((suma, l) => suma + aNumero(l.monto), 0);
   });
 
   // Títulos legibles (número/año/carátula del expediente, tipo y período del trámite)
@@ -174,7 +202,7 @@ const resumenDeCliente = async (clienteId) => {
       titulo: (f.tipo === 'EXPEDIENTE' ? tituloExpediente : tituloTramite).get(f.id) || `#${f.id}`,
       honorariosTotal: f.honorariosTotal,
       gastosTotal: f.gastosTotal,
-      ...calcularSaldo({ honorariosTotal: f.honorariosTotal, gastosTotal: f.gastosTotal }),
+      ...calcularSaldo({ honorariosTotal: f.honorariosTotal, gastosTotal: f.gastosTotal, cobrado: f.cobrado }),
     }))
     // Lo que más se debe, primero
     .sort((a, b) => b.saldo - a.saldo || a.titulo.localeCompare(b.titulo));
@@ -239,6 +267,8 @@ const resumenGlobal = async () => {
     return porCliente.get(clienteId);
   };
   const global = { honorariosNeto: 0, honorariosIva: 0, honorariosTotal: 0, cantLiquidaciones: 0, cantGastos: 0 };
+  // Un cliente que solo pagó anticipos (sin honorarios ni gastos todavía) también figura, con saldo a favor
+  cobradoPorCliente.forEach((_monto, clienteId) => acumulado(clienteId));
 
   liqPorPadre.forEach((g) => {
     const clienteId = clienteDe(g);
